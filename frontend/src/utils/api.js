@@ -57,6 +57,13 @@ export const emailAPI = {
   getInbox: () => api.get('/emails/inbox'),
   getSent: () => api.get('/emails/sent'),
   getEmail: (id) => api.get(`/emails/${id}`),
+  saveDraft: (data) => api.post('/emails/draft', data),
+  getDrafts: () => api.get('/emails/drafts'),
+  deleteDraft: (id) => api.delete(`/emails/draft/${id}`),
+  searchEmails: (query, folder) => api.get('/emails/search', { params: { query, folder } }),
+  getThread: (threadId) => api.get(`/emails/thread/${threadId}`),
+  updateEmailCategory: (id, category, securityScore) =>
+    api.put(`/emails/${id}/category`, { category, securityScore }),
 };
 
 export default api;

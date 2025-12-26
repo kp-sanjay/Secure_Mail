@@ -11,10 +11,6 @@ const Layout = ({ children }) => {
     navigate('/login');
   };
 
-  if (!isAuthenticated) {
-    return <>{children}</>;
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm border-b border-gray-200">
@@ -55,16 +51,55 @@ const Layout = ({ children }) => {
                 >
                   Compose
                 </Link>
+                <Link
+                  to="/drafts"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    location.pathname === '/drafts'
+                      ? 'border-primary-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Drafts
+                </Link>
+                <Link
+                  to="/dashboard"
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    location.pathname === '/dashboard'
+                      ? 'border-primary-500 text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Security Dashboard
+                </Link>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">{user?.name || user?.email}</span>
-              <button
-                onClick={handleLogout}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                Logout
-              </button>
+              {isAuthenticated ? (
+                <>
+                  <span className="text-sm text-gray-700">{user?.name || user?.email}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded hover:bg-gray-100"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="text-sm bg-primary-600 text-white px-4 py-1 rounded hover:bg-primary-700"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

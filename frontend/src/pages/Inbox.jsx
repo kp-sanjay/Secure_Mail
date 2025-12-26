@@ -2,22 +2,50 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { emailAPI } from '../utils/api';
-import { decryptRSA, importAESKey, decryptAES } from '../utils/crypto';
+import { decryptRSA, importAESKey, decryptAES, decryptAESWithNonce } from '../utils/crypto';
 
 const Inbox = () => {
   const [emails, setEmails] = useState([]);
+  const [filteredEmails, setFilteredEmails] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'thread'
   const { user, privateKey } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user || !privateKey) {
-      navigate('/login');
+    // Only fetch inbox if user is authenticated
+    if (user && privateKey) {
+      fetchInbox();
+    }
+  }, [user, privateKey]);
+
+  // Filter emails based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredEmails(emails);
       return;
     }
-    fetchInbox();
-  }, [user, privateKey, navigate]);
+
+    const query = searchQuery.toLowerCase();
+    const filtered = emails.filter((email) => {
+      // Search in sender name/email
+      const senderMatch = 
+        email.sender?.name?.toLowerCase().includes(query) ||
+        email.sender?.email?.toLowerCase().includes(query);
+      
+      // Search in encrypted subject (simplified - would decrypt in production)
+      const subjectMatch = email.encryptedSubject?.toLowerCase().includes(query);
+      
+      // Search in category
+      const categoryMatch = email.category?.toLowerCase().includes(query);
+
+      return senderMatch || subjectMatch || categoryMatch;
+    });
+
+    setFilteredEmails(filtered);
+  }, [searchQuery, emails]);
 
   const fetchInbox = async () => {
     try {
@@ -70,12 +98,49 @@ const Inbox = () => {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Group emails by thread
+  const groupByThread = (emailList) => {
+    const threadMap = new Map();
+    const unthreaded = [];
+
+    emailList.forEach((email) => {
+      if (email.threadId) {
+        if (!threadMap.has(email.threadId)) {
+          threadMap.set(email.threadId, []);
+        }
+        threadMap.get(email.threadId).push(email);
+      } else {
+        unthreaded.push(email);
+      }
+    });
+
+    // Sort threads by most recent email
+    const threads = Array.from(threadMap.values())
+      .map((thread) => ({
+        ...thread[0], // Use first email as representative
+        threadCount: thread.length,
+        isThread: true,
+      }))
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    return [...threads, ...unthreaded];
+  };
+
+  const handleThreadClick = async (email) => {
+    if (email.isThread && email.threadId) {
+      // Navigate to thread view
+      navigate(`/thread/${email.threadId}`);
+    } else {
+      handleEmailClick(email);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center mb-4">
               <h1 className="text-2xl font-bold text-gray-900">Inbox</h1>
               <button
                 onClick={() => navigate('/compose')}
@@ -84,9 +149,36 @@ const Inbox = () => {
                 Compose
               </button>
             </div>
+            <div className="flex items-center space-x-4">
+              <input
+                type="text"
+                placeholder="Search emails..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+              <select
+                value={viewMode}
+                onChange={(e) => setViewMode(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="list">List View</option>
+                <option value="thread">Thread View</option>
+              </select>
+            </div>
           </div>
 
-          {loading ? (
+          {!user ? (
+            <div className="p-8 text-center">
+              <p className="text-gray-500 mb-4">Please login to view your inbox</p>
+              <button
+                onClick={() => navigate('/login')}
+                className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+              >
+                Login
+              </button>
+            </div>
+          ) : loading ? (
             <div className="p-8 text-center">
               <p className="text-gray-500">Loading inbox...</p>
             </div>
@@ -100,10 +192,10 @@ const Inbox = () => {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {emails.map((email) => (
+              {(viewMode === 'thread' ? groupByThread(filteredEmails) : filteredEmails).map((email) => (
                 <div
                   key={email._id}
-                  onClick={() => handleEmailClick(email)}
+                  onClick={() => handleThreadClick(email)}
                   className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition"
                 >
                   <div className="flex justify-between items-start">
@@ -114,6 +206,21 @@ const Inbox = () => {
                         </p>
                         {!email.isRead && (
                           <span className="w-2 h-2 bg-primary-600 rounded-full"></span>
+                        )}
+                        {email.isThread && (
+                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            Thread ({email.threadCount} messages)
+                          </span>
+                        )}
+                        {email.category && email.category !== 'unknown' && (
+                          <span className={`text-xs px-2 py-1 rounded ${
+                            email.category === 'phishing' ? 'bg-red-100 text-red-800' :
+                            email.category === 'spam' ? 'bg-yellow-100 text-yellow-800' :
+                            email.category === 'priority' ? 'bg-green-100 text-green-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {email.category}
+                          </span>
                         )}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">

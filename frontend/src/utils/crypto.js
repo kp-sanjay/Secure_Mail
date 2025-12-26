@@ -437,3 +437,284 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+// ==================== ECC (Elliptic Curve Cryptography) Functions ====================
+
+/**
+ * Generate ECC-256 key pair for encryption/signing
+ * @returns {Promise<CryptoKeyPair>}
+ */
+export async function generateECCKeyPair() {
+  try {
+    const keyPair = await window.crypto.subtle.generateKey(
+      {
+        name: 'ECDH',
+        namedCurve: 'P-256', // ECC-256
+      },
+      true, // extractable
+      ['deriveKey', 'deriveBits']
+    );
+    return keyPair;
+  } catch (error) {
+    console.error('Error generating ECC key pair:', error);
+    throw new Error('Failed to generate ECC key pair');
+  }
+}
+
+/**
+ * Generate ECDSA key pair for digital signatures
+ * @returns {Promise<CryptoKeyPair>}
+ */
+export async function generateECDSAKeyPair() {
+  try {
+    const keyPair = await window.crypto.subtle.generateKey(
+      {
+        name: 'ECDSA',
+        namedCurve: 'P-256', // ECC-256
+      },
+      true, // extractable
+      ['sign', 'verify']
+    );
+    return keyPair;
+  } catch (error) {
+    console.error('Error generating ECDSA key pair:', error);
+    throw new Error('Failed to generate ECDSA key pair');
+  }
+}
+
+/**
+ * Export ECC public key to base64
+ * @param {CryptoKey} publicKey
+ * @returns {Promise<string>}
+ */
+export async function exportECCPublicKey(publicKey) {
+  try {
+    const exported = await window.crypto.subtle.exportKey('raw', publicKey);
+    return arrayBufferToBase64(exported);
+  } catch (error) {
+    console.error('Error exporting ECC public key:', error);
+    throw new Error('Failed to export ECC public key');
+  }
+}
+
+/**
+ * Import ECC public key from base64
+ * @param {string} keyData
+ * @returns {Promise<CryptoKey>}
+ */
+export async function importECCPublicKey(keyData) {
+  try {
+    const keyBuffer = base64ToArrayBuffer(keyData);
+    const publicKey = await window.crypto.subtle.importKey(
+      'raw',
+      keyBuffer,
+      {
+        name: 'ECDH',
+        namedCurve: 'P-256',
+      },
+      true,
+      ['deriveKey', 'deriveBits']
+    );
+    return publicKey;
+  } catch (error) {
+    console.error('Error importing ECC public key:', error);
+    throw new Error('Failed to import ECC public key');
+  }
+}
+
+// ==================== ECDH (Elliptic Curve Diffie-Hellman) Functions ====================
+
+/**
+ * Derive shared secret using ECDH
+ * @param {CryptoKey} privateKey - Our private ECC key
+ * @param {CryptoKey} publicKey - Other party's public ECC key
+ * @returns {Promise<CryptoKey>} - Derived AES key
+ */
+export async function deriveECDHKey(privateKey, publicKey) {
+  try {
+    const derivedKey = await window.crypto.subtle.deriveKey(
+      {
+        name: 'ECDH',
+        public: publicKey,
+      },
+      privateKey,
+      {
+        name: 'AES-GCM',
+        length: 256,
+      },
+      true,
+      ['encrypt', 'decrypt']
+    );
+    return derivedKey;
+  } catch (error) {
+    console.error('Error deriving ECDH key:', error);
+    throw new Error('Failed to derive ECDH key');
+  }
+}
+
+/**
+ * Derive shared secret and export as base64
+ * @param {CryptoKey} privateKey
+ * @param {CryptoKey} publicKey
+ * @returns {Promise<string>}
+ */
+export async function deriveECDHKeyBase64(privateKey, publicKey) {
+  try {
+    const derivedKey = await deriveECDHKey(privateKey, publicKey);
+    return await exportAESKey(derivedKey);
+  } catch (error) {
+    console.error('Error deriving ECDH key base64:', error);
+    throw new Error('Failed to derive ECDH key');
+  }
+}
+
+// ==================== ECDSA (Digital Signatures) Functions ====================
+
+/**
+ * Sign data using ECDSA
+ * @param {CryptoKey} privateKey - ECDSA private key
+ * @param {string} data - Data to sign
+ * @returns {Promise<string>} - Base64 encoded signature
+ */
+export async function signECDSA(privateKey, data) {
+  try {
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    
+    const signature = await window.crypto.subtle.sign(
+      {
+        name: 'ECDSA',
+        hash: { name: 'SHA-256' },
+      },
+      privateKey,
+      dataBuffer
+    );
+    
+    return arrayBufferToBase64(signature);
+  } catch (error) {
+    console.error('Error signing with ECDSA:', error);
+    throw new Error('Failed to sign data');
+  }
+}
+
+/**
+ * Verify ECDSA signature
+ * @param {CryptoKey} publicKey - ECDSA public key
+ * @param {string} signature - Base64 encoded signature
+ * @param {string} data - Original data
+ * @returns {Promise<boolean>}
+ */
+export async function verifyECDSA(publicKey, signature, data) {
+  try {
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    const signatureBuffer = base64ToArrayBuffer(signature);
+    
+    const isValid = await window.crypto.subtle.verify(
+      {
+        name: 'ECDSA',
+        hash: { name: 'SHA-256' },
+      },
+      publicKey,
+      signatureBuffer,
+      dataBuffer
+    );
+    
+    return isValid;
+  } catch (error) {
+    console.error('Error verifying ECDSA signature:', error);
+    return false;
+  }
+}
+
+// ==================== Enhanced Encryption with Nonce/IV Management ====================
+
+/**
+ * Encrypt with AES-GCM and proper nonce handling (prevents replay attacks)
+ * Enhanced version with timestamp and random nonce
+ * @param {CryptoKey} key
+ * @param {string} plaintext
+ * @param {number} timestamp - Optional timestamp for nonce
+ * @returns {Promise<{encrypted: string, iv: string, timestamp: number}>}
+ */
+export async function encryptAESWithNonce(key, plaintext, timestamp = Date.now()) {
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(plaintext);
+    
+    // Create IV from timestamp (first 4 bytes) + random (last 8 bytes)
+    // This ensures uniqueness and helps prevent replay attacks
+    const timestampBytes = new Uint8Array(4);
+    const view = new DataView(timestampBytes.buffer);
+    view.setUint32(0, timestamp, false); // Big-endian
+    
+    const randomBytes = window.crypto.getRandomValues(new Uint8Array(8));
+    const iv = new Uint8Array(12);
+    iv.set(timestampBytes, 0);
+    iv.set(randomBytes, 4);
+
+    const encrypted = await window.crypto.subtle.encrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv,
+        tagLength: 128, // Full authentication tag
+      },
+      key,
+      data
+    );
+
+    return {
+      encrypted: arrayBufferToBase64(encrypted),
+      iv: arrayBufferToBase64(iv),
+      timestamp: timestamp,
+    };
+  } catch (error) {
+    console.error('Error encrypting with AES and nonce:', error);
+    throw new Error('Failed to encrypt data');
+  }
+}
+
+/**
+ * Decrypt with AES-GCM and verify nonce timestamp (prevents replay attacks)
+ * @param {CryptoKey} key
+ * @param {string} encryptedData
+ * @param {string} iv
+ * @param {number} maxAge - Maximum age in milliseconds (default: 24 hours)
+ * @returns {Promise<string>}
+ */
+export async function decryptAESWithNonce(key, encryptedData, iv, maxAge = 24 * 60 * 60 * 1000) {
+  try {
+    const encryptedBuffer = base64ToArrayBuffer(encryptedData);
+    const ivBuffer = base64ToArrayBuffer(iv);
+    
+    // Extract timestamp from IV (first 4 bytes)
+    const timestampBytes = ivBuffer.slice(0, 4);
+    const view = new DataView(timestampBytes.buffer);
+    const timestamp = view.getUint32(0, false); // Big-endian
+    
+    // Check if message is too old (replay attack prevention)
+    const age = Date.now() - timestamp;
+    if (age > maxAge) {
+      throw new Error('Message is too old - possible replay attack');
+    }
+    if (age < 0) {
+      throw new Error('Message timestamp is in the future - invalid');
+    }
+
+    const decrypted = await window.crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: ivBuffer,
+        tagLength: 128,
+      },
+      key,
+      encryptedBuffer
+    );
+
+    const decoder = new TextDecoder();
+    return decoder.decode(decrypted);
+  } catch (error) {
+    console.error('Error decrypting with AES and nonce:', error);
+    throw new Error('Failed to decrypt data - possible replay attack or corrupted message');
+  }
+}
+

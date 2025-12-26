@@ -1,24 +1,33 @@
 const User = require('../models/User');
 
-// @desc    Update user's public key
+// @desc    Update user's public keys
 // @route   PUT /api/users/public-key
 // @access  Private
 const updatePublicKey = async (req, res) => {
   try {
-    const { publicKey } = req.body;
+    const { publicKey, eccPublicKey, ecdsaPublicKey } = req.body;
 
-    if (!publicKey) {
-      return res.status(400).json({ message: 'Public key is required' });
+    const updateData = {};
+    if (publicKey) {
+      if (typeof publicKey !== 'string' || publicKey.length < 100) {
+        return res.status(400).json({ message: 'Invalid RSA public key format' });
+      }
+      updateData.publicKey = publicKey;
+    }
+    if (eccPublicKey) {
+      updateData.eccPublicKey = eccPublicKey;
+    }
+    if (ecdsaPublicKey) {
+      updateData.ecdsaPublicKey = ecdsaPublicKey;
     }
 
-    // Validate public key format (basic check)
-    if (typeof publicKey !== 'string' || publicKey.length < 100) {
-      return res.status(400).json({ message: 'Invalid public key format' });
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'At least one public key is required' });
     }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { publicKey },
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -27,8 +36,10 @@ const updatePublicKey = async (req, res) => {
     }
 
     res.json({
-      message: 'Public key updated successfully',
+      message: 'Public keys updated successfully',
       publicKey: user.publicKey,
+      eccPublicKey: user.eccPublicKey,
+      ecdsaPublicKey: user.ecdsaPublicKey,
     });
   } catch (error) {
     console.error('Update public key error:', error);
@@ -61,6 +72,8 @@ const getPublicKeyByEmail = async (req, res) => {
       email: user.email,
       name: user.name,
       publicKey: user.publicKey,
+      eccPublicKey: user.eccPublicKey,
+      ecdsaPublicKey: user.ecdsaPublicKey,
     });
   } catch (error) {
     console.error('Get public key error:', error);

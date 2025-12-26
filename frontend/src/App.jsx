@@ -7,9 +7,12 @@ import Inbox from './pages/Inbox';
 import Sent from './pages/Sent';
 import Compose from './pages/Compose';
 import ViewEmail from './pages/ViewEmail';
+import Drafts from './pages/Drafts';
+import SecurityDashboard from './pages/SecurityDashboard';
+import ThreadView from './pages/ThreadView';
 
 const PrivateRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) {
     return (
@@ -19,7 +22,8 @@ const PrivateRoute = ({ children }) => {
     );
   }
 
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  // Allow access even without authentication (guest mode)
+  return children;
 };
 
 function App() {
@@ -65,6 +69,36 @@ function App() {
               <PrivateRoute>
                 <Layout>
                   <ViewEmail />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/drafts"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <Drafts />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <SecurityDashboard />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/thread/:threadId"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <ThreadView />
                 </Layout>
               </PrivateRoute>
             }
