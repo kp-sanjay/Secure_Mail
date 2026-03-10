@@ -3,12 +3,13 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { emailAPI } from '../utils/api';
 import { decryptRSA, importAESKey, decryptAES } from '../utils/crypto';
+import { decryptEnvelope } from '../utils/envelope';
 
 const ViewEmail = () => {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, privateKey } = useAuth();
+  const { user, privateKey, mlkemSecretKeyB64 } = useAuth();
   const [email, setEmail] = useState(null);
   const [decrypted, setDecrypted] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +40,7 @@ const ViewEmail = () => {
       setEmail(emailData);
 
       // Decrypt if user is receiver (has private key)
-      if (privateKey && emailData.receiver._id === user._id) {
+      if (privateKey && emailData?.receiver?._id === user._id) {
         await decryptEmailData(emailData);
       }
     } catch (err) {
@@ -52,6 +53,16 @@ const ViewEmail = () => {
 
   const decryptEmailData = async (emailData) => {
     try {
+      if (emailData.envelope) {
+        const dec = await decryptEnvelope({
+          envelope: emailData.envelope,
+          rsaPrivateKey: privateKey,
+          mlkemSecretKeyB64,
+        });
+        setDecrypted(dec);
+        return;
+      }
+
       // Decrypt AES key using private RSA key
       const aesKeyBase64 = await decryptRSA(privateKey, emailData.encryptedAESKey);
       const aesKey = await importAESKey(aesKeyBase64);
@@ -77,7 +88,7 @@ const ViewEmail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="p-6 flex items-center justify-center">
         <p className="text-gray-500">Loading email...</p>
       </div>
     );
@@ -85,12 +96,12 @@ const ViewEmail = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="p-6 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-500 mb-4">{error}</p>
           <button
             onClick={() => navigate('/inbox')}
-            className="text-primary-600 hover:text-primary-700"
+            className="text-isro-orange hover:text-isro-orange-light font-medium"
           >
             Back to Inbox
           </button>
@@ -101,43 +112,70 @@ const ViewEmail = () => {
 
   if (!email) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="p-6 flex items-center justify-center">
         <p className="text-gray-500">Email not found</p>
       </div>
     );
   }
 
-  const isReceiver = email.receiver._id === user._id;
-  const isSender = email.sender._id === user._id;
+  const senderId = email.sender?._id;
+  const receiverId = email.receiver?._id;
+  const isReceiver = receiverId && receiverId === user._id;
+  const isSender = senderId && senderId === user._id;
+
+  const level = email.envelope?.level ?? email.securityLevel;
+  const transport = email.transport || 'api';
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-lg shadow p-6">
+    <div className="p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="portal-card p-6">
           <div className="mb-6">
             <button
               onClick={() => navigate(isReceiver ? '/inbox' : '/sent')}
-              className="text-primary-600 hover:text-primary-700 mb-4"
+              className="text-isro-orange hover:text-isro-orange-light mb-4 text-sm font-medium"
             >
               ← Back
             </button>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-xl font-bold text-gray-100">
               {decrypted ? decrypted.subject : 'Encrypted Email'}
             </h1>
           </div>
 
-          <div className="space-y-4 border-b border-gray-200 pb-4 mb-4">
+          {level != null && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                level === 1 ? 'bg-gray-200 text-gray-800' :
+                level === 2 ? 'bg-blue-100 text-blue-800' :
+                level === 4 ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-700'
+              }`}>
+                Security Level {level}
+                {level === 4 && ' (Post-Quantum)'}
+                {level === 2 && ' (Quantum-Aided AES)'}
+                {level === 1 && ' (Basic SMTP)'}
+              </span>
+              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                Transport: {transport.toUpperCase()}
+              </span>
+            </div>
+          )}
+
+          <div className="space-y-4 border-b border-forest-500/20 pb-4 mb-4">
             <div>
-              <span className="text-sm font-medium text-gray-500">From: </span>
-              <span className="text-gray-900">{email.sender.name} ({email.sender.email})</span>
+              <span className="text-sm font-medium text-gray-400">From: </span>
+              <span className="text-gray-100">
+                {email.sender?.name || email.sender?.email || 'Unknown'}
+              </span>
             </div>
             <div>
-              <span className="text-sm font-medium text-gray-500">To: </span>
-              <span className="text-gray-900">{email.receiver.name} ({email.receiver.email})</span>
+              <span className="text-sm font-medium text-gray-400">To: </span>
+              <span className="text-gray-100">
+                {email.receiver?.name || email.receiver?.email || 'Unknown'}
+              </span>
             </div>
             <div>
-              <span className="text-sm font-medium text-gray-500">Date: </span>
-              <span className="text-gray-900">{formatDate(email.timestamp)}</span>
+              <span className="text-sm font-medium text-gray-400">Date: </span>
+              <span className="text-gray-100">{formatDate(email.timestamp)}</span>
             </div>
           </div>
 

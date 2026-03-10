@@ -1,23 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { emailAPI, userAPI } from '../utils/api';
+import { emailAPI, qrngAPI, userAPI } from '../utils/api';
 import {
-  generateAESKey,
-  exportAESKey,
+  // kept for legacy flows if needed later
   encryptAESWithNonce,
-  encryptRSA,
-  importPublicKey,
-  generateECCKeyPair,
-  exportECCPublicKey,
-  importECCPublicKey,
-  deriveECDHKeyBase64,
-  generateECDSAKeyPair,
-  signECDSA,
-  exportECCPublicKey as exportECDSAKey,
 } from '../utils/crypto';
+import { encryptEnvelope } from '../utils/envelope';
 import { phishingDetector } from '../utils/phishingDetector';
 import { anomalyDetector } from '../utils/anomalyDetector';
+import { getTrustedFingerprints, setTrustedFingerprints } from '../utils/trustStore';
 
 const Compose = () => {
   const location = useLocation();
@@ -31,6 +23,8 @@ const Compose = () => {
   const [error, setError] = useState('');
   const [securityWarning, setSecurityWarning] = useState(null);
   const { user, privateKey } = useAuth();
+  const [securityLevel, setSecurityLevel] = useState(4);
+  const [trustIssue, setTrustIssue] = useState(null);
   const navigate = useNavigate();
 
   // Load draft if editing
@@ -110,69 +104,89 @@ const Compose = () => {
     setLoading(true);
 
     try {
-      // Step 1: Get receiver's public keys (RSA and ECC)
+      // Step 1: Get receiver's public keys (RSA + ML-KEM)
       const receiverResponse = await userAPI.getPublicKeyByEmail(formData.receiverEmail);
       const receiverPublicKeyPEM = receiverResponse.data.publicKey;
-      const receiverECCPublicKey = receiverResponse.data.eccPublicKey;
+      const receiverMlKemPublicKeyB64 = receiverResponse.data.mlkemPublicKey;
 
-      // Step 2: Import receiver's public keys
-      const receiverPublicKey = await importPublicKey(receiverPublicKeyPEM);
-      let receiverECCPublicKeyObj = null;
-      let encryptedECDHKey = null;
+      // Step 1.5: TOFU key trust check (warn on key changes)
+      const sha256B64 = async (text) => {
+        const bytes = new TextEncoder().encode(text || '');
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const u8 = new Uint8Array(digest);
+        let bin = '';
+        for (let i = 0; i < u8.length; i++) bin += String.fromCharCode(u8[i]);
+        return btoa(bin);
+      };
 
-      // Step 3: Generate ECDH key pair for session key exchange
-      if (receiverECCPublicKey) {
-        try {
-          receiverECCPublicKeyObj = await importECCPublicKey(receiverECCPublicKey);
-          const eccKeyPair = await generateECCKeyPair();
-          encryptedECDHKey = await deriveECDHKeyBase64(eccKeyPair.privateKey, receiverECCPublicKeyObj);
-        } catch (err) {
-          console.warn('ECDH key exchange failed, falling back to RSA:', err);
-        }
+      const newFp = {
+        rsaFpB64: receiverPublicKeyPEM ? await sha256B64(receiverPublicKeyPEM) : null,
+        mlkemFpB64: receiverMlKemPublicKeyB64 ? await sha256B64(receiverMlKemPublicKeyB64) : null,
+      };
+      const prevFp = getTrustedFingerprints(formData.receiverEmail);
+      const changed =
+        prevFp &&
+        ((prevFp.rsaFpB64 && newFp.rsaFpB64 && prevFp.rsaFpB64 !== newFp.rsaFpB64) ||
+          (prevFp.mlkemFpB64 && newFp.mlkemFpB64 && prevFp.mlkemFpB64 !== newFp.mlkemFpB64));
+
+      if (changed) {
+        setTrustIssue({
+          email: formData.receiverEmail,
+          prevFp,
+          newFp,
+        });
+        setError('Recipient keys have changed since last time. Verify before sending.');
+        return;
       }
 
-      // Step 4: Generate AES key for message encryption
-      const aesKey = await generateAESKey();
-      const aesKeyBase64 = await exportAESKey(aesKey);
+      // First contact: store trust on first use
+      if (!prevFp) {
+        setTrustedFingerprints(formData.receiverEmail, newFp);
+      }
+      setTrustIssue(null);
 
-      // Step 5: Encrypt subject and body with AES-GCM and proper nonce handling
-      const encryptedSubjectData = await encryptAESWithNonce(aesKey, formData.subject);
-      const encryptedBodyData = await encryptAESWithNonce(aesKey, formData.body);
-
-      // Step 6: Encrypt AES key (prefer ECDH, fallback to RSA)
-      let encryptedAESKey = null;
-      if (encryptedECDHKey) {
-        // Use ECDH-derived key
-        encryptedAESKey = encryptedECDHKey;
-      } else {
-        // Fallback to RSA
-        encryptedAESKey = await encryptRSA(receiverPublicKey, aesKeyBase64);
+      // Step 2: For Level 2, fetch a (simulated) quantum seed from backend
+      let quantumSeedB64 = null;
+      if (securityLevel === 2) {
+        const seedResp = await qrngAPI.getSeed(32);
+        quantumSeedB64 = seedResp.data.seedB64;
       }
 
-      // Step 7: Generate digital signature with ECDSA
-      const ecdsaKeyPair = await generateECDSAKeyPair();
-      const messageToSign = `${formData.subject}${formData.body}${formData.receiverEmail}`;
-      const signature = await signECDSA(ecdsaKeyPair.privateKey, messageToSign);
+      // Step 3: Encrypt into a versioned SecureEnvelope
+      const envelope = await encryptEnvelope({
+        level: securityLevel,
+        senderEmail: user.email,
+        receiverEmail: formData.receiverEmail,
+        receiverPublicKeyPem: receiverPublicKeyPEM,
+        receiverMlKemPublicKeyB64,
+        subject: formData.subject,
+        body: formData.body,
+        quantumSeedB64,
+      });
 
-      // Step 8: Create search index (simplified - would be encrypted in production)
-      const searchIndex = `${formData.subject} ${formData.body}`.toLowerCase();
+      // Step 4: Create search index
+      // For privacy, only store plaintext index for Level 1 (unencrypted SMTP).
+      // For Level 2/4 we disable plaintext indexing.
+      const searchIndex =
+        securityLevel === 1
+          ? `${formData.subject} ${formData.body}`.toLowerCase()
+          : '';
 
-      // Step 9: Track behavioral event
+      // Step 5: Track behavioral event
       anomalyDetector.trackEvent('email_sent', {
         recipient: formData.receiverEmail,
         bodyLength: formData.body.length,
         hour: new Date().getHours(),
       });
 
-      // Step 10: Send encrypted email to server
+      // Step 6: Send email to server (envelope-first; legacy fields are optional)
       await emailAPI.sendEmail({
         receiverEmail: formData.receiverEmail,
-        encryptedSubject: `${encryptedSubjectData.encrypted}:${encryptedSubjectData.iv}`,
-        encryptedBody: `${encryptedBodyData.encrypted}:${encryptedBodyData.iv}`,
-        encryptedAESKey: encryptedAESKey,
-        encryptedECDHKey: encryptedECDHKey || null,
-        signature: signature,
-        nonce: encryptedSubjectData.timestamp.toString(),
+        envelope,
+        securityLevel,
+        transport: securityLevel === 1 ? 'smtp' : 'api',
+        // Keep nonce for server-side replay-defense bookkeeping
+        nonce: Date.now().toString(),
         searchIndex: searchIndex,
       });
 
@@ -190,12 +204,19 @@ const Compose = () => {
     }
   };
 
+  const levelCards = [
+    { level: 1, label: 'Level 1', desc: 'Basic SMTP', color: 'bg-gray-100 border-gray-300', activeColor: 'ring-2 ring-gray-500' },
+    { level: 2, label: 'Level 2', desc: 'Quantum-Aided AES', color: 'bg-blue-50 border-blue-200', activeColor: 'ring-2 ring-blue-600' },
+    { level: 4, label: 'Level 4', desc: 'Post-Quantum (PQ)', color: 'bg-orange-50 border-orange-200', activeColor: 'ring-2 ring-isro-orange' },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">Compose Email</h1>
+    <div className="p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="portal-card p-6">
+          <div className="mb-6 flex items-center justify-between border-b border-forest-500/20 pb-4">
+            <h1 className="text-xl font-bold text-gray-100">Compose Email</h1>
+            <span className="text-xs text-gray-400">Security Level: {securityLevel}</span>
           </div>
 
           {error && (
@@ -216,7 +237,53 @@ const Compose = () => {
             </div>
           )}
 
+          {trustIssue && (
+            <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
+              <strong>Key Change Detected:</strong> The recipient’s key fingerprint changed. Only proceed if you verified the new key out-of-band.
+              <div className="mt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrustedFingerprints(trustIssue.email, trustIssue.newFp);
+                    setTrustIssue(null);
+                    setError('');
+                  }}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition"
+                >
+                  Trust new key
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/inbox')}
+                  className="px-4 py-2 border border-yellow-300 rounded-lg text-yellow-900 hover:bg-yellow-100 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Security Level</label>
+              <div className="grid grid-cols-3 gap-3">
+                {levelCards.map(({ level, label, desc, color, activeColor }) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setSecurityLevel(level)}
+                    className={`px-4 py-3 border rounded text-left transition ${color} ${
+                      securityLevel === level ? activeColor : 'hover:opacity-90'
+                    }`}
+                  >
+                    <span className="font-semibold text-gray-900">{label}</span>
+                    <span className="block text-xs text-gray-600 mt-0.5">{desc}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">Level 3 (One-Time Pad) requires QKD setup — coming soon.</p>
+            </div>
+
             <div>
               <label htmlFor="receiverEmail" className="block text-sm font-medium text-gray-700 mb-2">
                 To
@@ -228,7 +295,7 @@ const Compose = () => {
                 value={formData.receiverEmail}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
                 placeholder="recipient@email.com"
               />
             </div>
@@ -244,7 +311,7 @@ const Compose = () => {
                 value={formData.subject}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
                 placeholder="Email subject"
               />
             </div>
@@ -260,7 +327,7 @@ const Compose = () => {
                 onChange={handleChange}
                 required
                 rows={12}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
                 placeholder="Write your encrypted message here..."
               />
             </div>
@@ -270,7 +337,7 @@ const Compose = () => {
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={savingDraft || !user}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {savingDraft ? 'Saving...' : 'Save Draft'}
               </button>
@@ -278,14 +345,14 @@ const Compose = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/inbox')}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                  className="px-6 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !user}
-                  className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="px-6 py-2 bg-forest-500 text-black rounded hover:bg-forest-400 focus:outline-none focus:ring-2 focus:ring-forest-400 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition font-semibold"
                 >
                   {loading ? 'Sending...' : 'Send'}
                 </button>

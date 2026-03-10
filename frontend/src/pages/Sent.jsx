@@ -37,15 +37,15 @@ const Sent = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="portal-card">
+          <div className="px-6 py-4 border-b border-forest-500/20">
             <div className="flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-gray-900">Sent</h1>
+              <h1 className="text-xl font-bold text-gray-100">Secure Sent</h1>
               <button
                 onClick={() => navigate('/compose')}
-                className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+                className="bg-forest-500 text-black px-4 py-2 rounded hover:bg-forest-400 transition font-semibold"
               >
                 Compose
               </button>
@@ -54,34 +54,34 @@ const Sent = () => {
 
           {loading ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">Loading sent emails...</p>
+              <p className="text-gray-300">Loading sent emails...</p>
             </div>
           ) : error ? (
             <div className="p-8 text-center">
-              <p className="text-red-500">{error}</p>
+              <p className="text-red-400">{error}</p>
             </div>
           ) : emails.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">No sent emails</p>
+              <p className="text-gray-300">No sent emails</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-white/10">
               {emails.map((email) => (
                 <div
                   key={email._id}
                   onClick={() => navigate(`/email/${email._id}`)}
-                  className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition"
+                  className="px-6 py-4 hover:bg-white/5 cursor-pointer transition"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-gray-100">
                         To: {email.receiver?.name || email.receiver?.email || 'Unknown'}
                       </p>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-300 mt-1">
                         [Encrypted Email]
                       </p>
                     </div>
-                    <p className="text-sm text-gray-500">{formatDate(email.timestamp)}</p>
+                    <p className="text-sm text-gray-400">{formatDate(email.timestamp)}</p>
                   </div>
                 </div>
               ))}

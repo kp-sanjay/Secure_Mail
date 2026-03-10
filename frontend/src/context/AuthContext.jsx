@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI, userAPI } from '../utils/api';
+import { authAPI, kmsAPI, userAPI } from '../utils/api';
 import {
   generateRSAKeyPair,
   exportPublicKey,
@@ -8,6 +8,7 @@ import {
   encryptPrivateKeyWithPassword,
   decryptPrivateKeyWithPassword,
 } from '../utils/crypto';
+import { mlkemGenerateKeyPairBase64 } from '../utils/pqc';
 
 const AuthContext = createContext();
 
@@ -23,25 +24,58 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [privateKey, setPrivateKey] = useState(null);
+  const [mlkemSecretKeyB64, setMlkemSecretKeyB64] = useState(null);
 
   // Check if user is logged in on mount
   useEffect(() => {
     checkAuth();
   }, []);
 
+  const secureStoreGet = async (name) => {
+    try {
+      if (window?.electronAPI?.secureStore?.get) {
+        return await window.electronAPI.secureStore.get(name);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const secureStoreSet = async (name, value) => {
+    try {
+      if (window?.electronAPI?.secureStore?.set) {
+        await window.electronAPI.secureStore.set(name, value);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  };
+
   const checkAuth = async () => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
     const storedEncryptedPrivateKey = localStorage.getItem('encryptedPrivateKey');
+    const storedEncryptedKeyBundle = localStorage.getItem('encryptedKeyBundleV1');
 
     if (token && storedUser) {
       try {
         const response = await authAPI.getMe();
         setUser(response.data);
 
+        // If running in Electron, mirror secure-store key bundle into localStorage
+        if (!storedEncryptedKeyBundle) {
+          const fromKeychain = await secureStoreGet('encryptedKeyBundleV1');
+          if (fromKeychain) {
+            localStorage.setItem('encryptedKeyBundleV1', fromKeychain);
+          }
+        }
+
         // If encrypted private key exists, user needs to decrypt it with password
         // For now, we'll load it when they decrypt it
-        if (storedEncryptedPrivateKey) {
+        if (storedEncryptedKeyBundle || storedEncryptedPrivateKey) {
           // Private key will be loaded when user provides password
         }
       } catch (error) {
@@ -103,20 +137,40 @@ export const AuthProvider = ({ children }) => {
       const publicKeyPEM = await exportPublicKey(keyPair.publicKey);
       const privateKeyPEM = await exportPrivateKey(keyPair.privateKey);
 
-      // Encrypt private key with password
-      const encryptedPrivateKey = await encryptPrivateKeyWithPassword(
-        privateKeyPEM,
-        password
-      );
+      // Generate ML-KEM (Kyber/ML-KEM-768) key pair for Level 4
+      const { publicKeyB64: mlkemPublicKey, secretKeyB64: mlkemSecretKey } =
+        await mlkemGenerateKeyPairBase64();
 
-      // Store encrypted private key locally
-      localStorage.setItem('encryptedPrivateKey', encryptedPrivateKey);
+      // Encrypt a key bundle with password (reuses the same PBKDF2 + AES-GCM wrapper)
+      const keyBundleJson = JSON.stringify({
+        v: 1,
+        rsaPrivateKeyPEM: privateKeyPEM,
+        mlkemSecretKeyB64: mlkemSecretKey,
+      });
+      const encryptedKeyBundle = await encryptPrivateKeyWithPassword(keyBundleJson, password);
 
-      // Upload public key to server
-      await userAPI.updatePublicKey(publicKeyPEM);
+      localStorage.setItem('encryptedKeyBundleV1', encryptedKeyBundle);
+      await secureStoreSet('encryptedKeyBundleV1', encryptedKeyBundle);
+      // Keep legacy key for older code paths
+      localStorage.setItem('encryptedPrivateKey', await encryptPrivateKeyWithPassword(privateKeyPEM, password));
+
+      // Upload public keys + capabilities to server
+      const publishPayload = {
+        publicKey: publicKeyPEM,
+        mlkemPublicKey,
+        keyCapabilities: ['rsa-oaep-2048', 'mlkem-768'],
+      };
+      await userAPI.updatePublicKey(publishPayload);
+      // Best-effort publish into KMS directory (does not break if KMS is down)
+      try {
+        await kmsAPI.publishKeys(publishPayload);
+      } catch (e) {
+        console.warn('KMS publish failed (continuing):', e);
+      }
 
       // Store private key in memory (decrypted)
       setPrivateKey(keyPair.privateKey);
+      setMlkemSecretKeyB64(mlkemSecretKey);
 
       return { success: true };
     } catch (error) {
@@ -128,15 +182,28 @@ export const AuthProvider = ({ children }) => {
   const loadOrGenerateKeys = async (password) => {
     try {
       const storedEncryptedPrivateKey = localStorage.getItem('encryptedPrivateKey');
+      const storedEncryptedKeyBundle = localStorage.getItem('encryptedKeyBundleV1');
 
-      if (storedEncryptedPrivateKey) {
-        // Decrypt and load existing private key
-        const privateKeyPEM = await decryptPrivateKeyWithPassword(
-          storedEncryptedPrivateKey,
-          password
-        );
-        const privateKey = await importPrivateKey(privateKeyPEM);
-        setPrivateKey(privateKey);
+      const keyBundleCipher =
+        storedEncryptedKeyBundle || (await secureStoreGet('encryptedKeyBundleV1'));
+
+      if (keyBundleCipher) {
+        if (!storedEncryptedKeyBundle) {
+          localStorage.setItem('encryptedKeyBundleV1', keyBundleCipher);
+        }
+        const bundleJson = await decryptPrivateKeyWithPassword(keyBundleCipher, password);
+        const bundle = JSON.parse(bundleJson);
+        if (!bundle?.rsaPrivateKeyPEM) throw new Error('Invalid key bundle');
+
+        const rsaPrivateKey = await importPrivateKey(bundle.rsaPrivateKeyPEM);
+        setPrivateKey(rsaPrivateKey);
+        setMlkemSecretKeyB64(bundle.mlkemSecretKeyB64 || null);
+      } else if (storedEncryptedPrivateKey) {
+        // Legacy: Decrypt and load existing RSA private key only
+        const privateKeyPEM = await decryptPrivateKeyWithPassword(storedEncryptedPrivateKey, password);
+        const rsaPrivateKey = await importPrivateKey(privateKeyPEM);
+        setPrivateKey(rsaPrivateKey);
+        setMlkemSecretKeyB64(null);
       } else {
         // Generate new keys if they don't exist
         await initializeKeys(password);
@@ -151,13 +218,16 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem('encryptedPrivateKey');
+    localStorage.removeItem('encryptedKeyBundleV1');
     setUser(null);
     setPrivateKey(null);
+    setMlkemSecretKeyB64(null);
   };
 
   const value = {
     user,
     privateKey,
+    mlkemSecretKeyB64,
     loading,
     register,
     login,

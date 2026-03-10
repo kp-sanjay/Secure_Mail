@@ -47,7 +47,7 @@ export const authAPI = {
 
 // User API
 export const userAPI = {
-  updatePublicKey: (publicKey) => api.put('/users/public-key', { publicKey }),
+  updatePublicKey: (payload) => api.put('/users/public-key', payload),
   getPublicKeyByEmail: (email) => api.get(`/users/public-key/${email}`),
 };
 
@@ -64,6 +64,32 @@ export const emailAPI = {
   getThread: (threadId) => api.get(`/emails/thread/${threadId}`),
   updateEmailCategory: (id, category, securityScore) =>
     api.put(`/emails/${id}/category`, { category, securityScore }),
+};
+
+// Quantum RNG API (currently simulated on backend)
+export const qrngAPI = {
+  getSeed: (bytes = 32) => api.get('/qrng/seed', { params: { bytes } }),
+};
+
+// Key Management Service API
+export const kmsAPI = {
+  publishKeys: (payload) => api.put('/kms/keys', payload),
+  getMyKeys: () => api.get('/kms/me'),
+  getKeysByEmail: (email) => api.get(`/kms/keys/${email}`),
+  revoke: (payload) => api.post('/kms/revoke', payload),
+};
+
+// AI assistant APIs (template/FAQ backed by default)
+export const aiAPI = {
+  compose: (payload) => api.post('/ai/compose', payload),
+  chat: (payload) => api.post('/ai/chat', payload),
+};
+
+export const calendarAPI = {
+  list: (params) => api.get('/calendar', { params }),
+  create: (payload) => api.post('/calendar', payload),
+  update: (id, payload) => api.put(`/calendar/${id}`, payload),
+  remove: (id) => api.delete(`/calendar/${id}`),
 };
 
 export default api;

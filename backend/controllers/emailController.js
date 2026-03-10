@@ -1,5 +1,6 @@
 const Email = require('../models/Email');
 const User = require('../models/User');
+const { sendSmtpMail } = require('../services/smtpSender');
 
 // @desc    Send an encrypted email
 // @route   POST /api/emails
@@ -58,7 +59,7 @@ const getInbox = async (req, res) => {
     const emails = await Email.find({ receiver: req.user._id })
       .populate('sender', 'name email')
       .sort({ timestamp: -1 })
-      .select('encryptedSubject encryptedBody encryptedAESKey timestamp isRead sender');
+      .select('envelope securityLevel transport encryptedSubject encryptedBody encryptedAESKey encryptedECDHKey signature nonce timestamp isRead sender threadId category securityScore');
 
     res.json(emails);
   } catch (error) {
@@ -75,7 +76,7 @@ const getSent = async (req, res) => {
     const emails = await Email.find({ sender: req.user._id })
       .populate('receiver', 'name email')
       .sort({ timestamp: -1 })
-      .select('encryptedSubject encryptedBody encryptedAESKey timestamp receiver');
+      .select('envelope securityLevel transport encryptedSubject encryptedBody encryptedAESKey encryptedECDHKey signature nonce timestamp receiver threadId category securityScore');
 
     res.json(emails);
   } catch (error) {
@@ -319,6 +320,9 @@ const sendEmailEnhanced = async (req, res) => {
   try {
     const {
       receiverEmail,
+      envelope,
+      securityLevel,
+      transport,
       encryptedSubject,
       encryptedBody,
       encryptedAESKey,
@@ -331,9 +335,26 @@ const sendEmailEnhanced = async (req, res) => {
     } = req.body;
 
     // Validation
-    if (!receiverEmail || !encryptedSubject || !encryptedBody || (!encryptedAESKey && !encryptedECDHKey)) {
+    if (!receiverEmail) {
       return res.status(400).json({
-        message: 'Please provide receiver email, encrypted subject, body, and encryption key',
+        message: 'Please provide receiver email',
+      });
+    }
+    const hasEnvelope = envelope && typeof envelope === 'object';
+    const hasLegacyFields =
+      typeof encryptedSubject === 'string' &&
+      typeof encryptedBody === 'string' &&
+      (typeof encryptedAESKey === 'string' || typeof encryptedECDHKey === 'string');
+
+    if (!hasEnvelope && !hasLegacyFields) {
+      return res.status(400).json({
+        message: 'Please provide either a valid envelope or legacy encrypted fields',
+      });
+    }
+
+    if (transport === 'smtp' && !process.env.SMTP_OUT_HOST) {
+      return res.status(400).json({
+        message: 'SMTP transport requested but SMTP_OUT_HOST is not configured on the server',
       });
     }
 
@@ -356,9 +377,12 @@ const sendEmailEnhanced = async (req, res) => {
     const email = await Email.create({
       sender: req.user._id,
       receiver: receiver._id,
-      encryptedSubject,
-      encryptedBody,
-      encryptedAESKey: encryptedAESKey || null,
+      envelope: hasEnvelope ? envelope : null,
+      securityLevel: typeof securityLevel === 'number' ? securityLevel : (hasEnvelope ? envelope.level : null),
+      transport: transport === 'smtp' ? 'smtp' : 'api',
+      encryptedSubject: typeof encryptedSubject === 'string' ? encryptedSubject : '',
+      encryptedBody: typeof encryptedBody === 'string' ? encryptedBody : '',
+      encryptedAESKey: typeof encryptedAESKey === 'string' ? encryptedAESKey : '',
       encryptedECDHKey: encryptedECDHKey || null,
       signature: signature || null,
       nonce: nonce || Date.now().toString(),
@@ -367,6 +391,15 @@ const sendEmailEnhanced = async (req, res) => {
       searchIndex: searchIndex || null,
       isDraft: false,
     });
+
+    // Optional SMTP delivery (still stores ciphertext in DB)
+    if (email.transport === 'smtp') {
+      const from = process.env.SMTP_FROM || req.user.email;
+      const to = receiver.email;
+      const { messageId } = await sendSmtpMail({ from, to, envelope: email.envelope || null });
+      email.smtpMessageId = messageId;
+      await email.save();
+    }
 
     res.status(201).json({
       message: 'Email sent successfully',

@@ -97,23 +97,23 @@ const SecurityDashboard = () => {
   };
 
   const getRiskColor = (score) => {
-    if (score >= 70) return 'text-red-600 bg-red-100';
-    if (score >= 40) return 'text-yellow-600 bg-yellow-100';
-    return 'text-green-600 bg-green-100';
+    if (score >= 70) return 'text-red-200 bg-red-500/20 border border-red-500/30';
+    if (score >= 40) return 'text-yellow-200 bg-yellow-500/20 border border-yellow-500/30';
+    return 'text-forest-200 bg-forest-500/20 border border-forest-500/30';
   };
 
   const getSeverityColor = (severity) => {
-    if (severity === 'high') return 'text-red-600 bg-red-100';
-    if (severity === 'medium') return 'text-yellow-600 bg-yellow-100';
-    return 'text-blue-600 bg-blue-100';
+    if (severity === 'high') return 'text-red-200 bg-red-500/20 border border-red-500/30';
+    if (severity === 'medium') return 'text-yellow-200 bg-yellow-500/20 border border-yellow-500/30';
+    return 'text-cyan-200 bg-cyan-500/20 border border-cyan-500/30';
   };
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-500">Please login to view the security dashboard</p>
+      <div className="p-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="portal-card p-8 text-center">
+            <p className="text-gray-300">Please login to view the security dashboard</p>
           </div>
         </div>
       </div>
@@ -121,50 +121,50 @@ const SecurityDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Security Dashboard</h1>
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold text-gray-100 mb-6">Security Dashboard</h1>
 
         {loading ? (
           <div className="text-center py-12">
-            <p className="text-gray-500">Loading dashboard...</p>
+            <p className="text-gray-300">Loading dashboard...</p>
           </div>
         ) : (
           <>
             {/* Statistics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500">Total Emails</h3>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalEmails}</p>
+              <div className="portal-card p-6">
+                <h3 className="text-sm font-medium text-gray-300">Total Emails</h3>
+                <p className="text-3xl font-bold text-gray-100 mt-2">{stats.totalEmails}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500">Phishing Detected</h3>
-                <p className="text-3xl font-bold text-red-600 mt-2">{stats.phishingDetected}</p>
+              <div className="portal-card p-6">
+                <h3 className="text-sm font-medium text-gray-300">Phishing Detected</h3>
+                <p className="text-3xl font-bold text-red-400 mt-2">{stats.phishingDetected}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500">Spam Detected</h3>
-                <p className="text-3xl font-bold text-yellow-600 mt-2">{stats.spamDetected}</p>
+              <div className="portal-card p-6">
+                <h3 className="text-sm font-medium text-gray-300">Spam Detected</h3>
+                <p className="text-3xl font-bold text-yellow-400 mt-2">{stats.spamDetected}</p>
               </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500">Anomalies</h3>
-                <p className="text-3xl font-bold text-orange-600 mt-2">{stats.anomaliesDetected}</p>
+              <div className="portal-card p-6">
+                <h3 className="text-sm font-medium text-gray-300">Anomalies</h3>
+                <p className="text-3xl font-bold text-orange-400 mt-2">{stats.anomaliesDetected}</p>
               </div>
             </div>
 
             {/* Recent Threats */}
-            <div className="bg-white rounded-lg shadow mb-8">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">Recent Threats</h2>
+            <div className="portal-card mb-8">
+              <div className="px-6 py-4 border-b border-forest-500/20">
+                <h2 className="text-lg font-bold text-gray-100">Recent Threats</h2>
               </div>
               <div className="p-6">
                 {recentThreats.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">No recent threats detected</p>
+                  <p className="text-gray-300 text-center py-4">No recent threats detected</p>
                 ) : (
                   <div className="space-y-4">
                     {recentThreats.map((threat) => (
                       <div
                         key={threat._id}
-                        className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
+                        className="border border-forest-500/15 rounded p-4 hover:bg-white/5 transition"
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
@@ -180,23 +180,23 @@ const SecurityDashboard = () => {
                                 {threat.category}
                               </span>
                             </div>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-gray-300">
                               From: {threat.sender?.email || 'Unknown'}
                             </p>
-                            <p className="text-xs text-gray-500 mt-1">
+                            <p className="text-xs text-gray-400 mt-1">
                               {new Date(threat.timestamp).toLocaleString()}
                             </p>
                           </div>
                           <div className="flex space-x-2">
                             <button
                               onClick={() => handleMarkAsSafe(threat._id)}
-                              className="text-sm text-green-600 hover:text-green-700 px-3 py-1 border border-green-600 rounded hover:bg-green-50"
+                              className="text-sm text-forest-300 hover:text-forest-400 px-3 py-1 border border-forest-500/50 rounded hover:bg-white/5 transition"
                             >
                               Mark Safe
                             </button>
                             <button
                               onClick={() => handleMarkAsPhishing(threat._id)}
-                              className="text-sm text-red-600 hover:text-red-700 px-3 py-1 border border-red-600 rounded hover:bg-red-50"
+                              className="text-sm text-red-300 hover:text-red-200 px-3 py-1 border border-red-500/60 rounded hover:bg-white/5 transition"
                             >
                               Mark Phishing
                             </button>
@@ -210,27 +210,27 @@ const SecurityDashboard = () => {
             </div>
 
             {/* Behavioral Anomalies */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">Behavioral Anomalies</h2>
+            <div className="portal-card">
+              <div className="px-6 py-4 border-b border-forest-500/20">
+                <h2 className="text-lg font-bold text-gray-100">Behavioral Anomalies</h2>
               </div>
               <div className="p-6">
                 {anomalies.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">No behavioral anomalies detected</p>
+                  <p className="text-gray-300 text-center py-4">No behavioral anomalies detected</p>
                 ) : (
                   <div className="space-y-3">
                     {anomalies.map((anomaly, index) => (
                       <div
                         key={index}
-                        className="border border-gray-200 rounded-lg p-4"
+                        className="border border-forest-500/15 rounded p-4"
                       >
                         <div className="flex items-center space-x-2 mb-2">
                           <span className={`px-3 py-1 rounded-full text-sm font-medium ${getSeverityColor(anomaly.severity)}`}>
                             {anomaly.severity.toUpperCase()}
                           </span>
-                          <span className="text-sm text-gray-600">{anomaly.type.replace(/_/g, ' ')}</span>
+                          <span className="text-sm text-gray-300">{anomaly.type.replace(/_/g, ' ')}</span>
                         </div>
-                        <p className="text-sm text-gray-700">{anomaly.message}</p>
+                        <p className="text-sm text-gray-200">{anomaly.message}</p>
                       </div>
                     ))}
                   </div>

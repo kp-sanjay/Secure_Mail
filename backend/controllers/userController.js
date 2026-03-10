@@ -5,7 +5,7 @@ const User = require('../models/User');
 // @access  Private
 const updatePublicKey = async (req, res) => {
   try {
-    const { publicKey, eccPublicKey, ecdsaPublicKey } = req.body;
+    const { publicKey, eccPublicKey, ecdsaPublicKey, mlkemPublicKey, keyCapabilities } = req.body;
 
     const updateData = {};
     if (publicKey) {
@@ -20,10 +20,21 @@ const updatePublicKey = async (req, res) => {
     if (ecdsaPublicKey) {
       updateData.ecdsaPublicKey = ecdsaPublicKey;
     }
+    if (mlkemPublicKey) {
+      if (typeof mlkemPublicKey !== 'string' || mlkemPublicKey.length < 40) {
+        return res.status(400).json({ message: 'Invalid ML-KEM public key format' });
+      }
+      updateData.mlkemPublicKey = mlkemPublicKey;
+    }
+    if (Array.isArray(keyCapabilities)) {
+      updateData.keyCapabilities = keyCapabilities.filter((x) => typeof x === 'string');
+    }
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ message: 'At least one public key is required' });
     }
+
+    updateData.keyUpdatedAt = new Date();
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
@@ -40,6 +51,9 @@ const updatePublicKey = async (req, res) => {
       publicKey: user.publicKey,
       eccPublicKey: user.eccPublicKey,
       ecdsaPublicKey: user.ecdsaPublicKey,
+      mlkemPublicKey: user.mlkemPublicKey,
+      keyCapabilities: user.keyCapabilities,
+      keyUpdatedAt: user.keyUpdatedAt,
     });
   } catch (error) {
     console.error('Update public key error:', error);
@@ -58,7 +72,9 @@ const getPublicKeyByEmail = async (req, res) => {
       return res.status(400).json({ message: 'Email is required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('publicKey name email');
+    const user = await User.findOne({ email: email.toLowerCase() }).select(
+      'publicKey eccPublicKey ecdsaPublicKey mlkemPublicKey keyCapabilities keyUpdatedAt name email'
+    );
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -74,6 +90,9 @@ const getPublicKeyByEmail = async (req, res) => {
       publicKey: user.publicKey,
       eccPublicKey: user.eccPublicKey,
       ecdsaPublicKey: user.ecdsaPublicKey,
+      mlkemPublicKey: user.mlkemPublicKey,
+      keyCapabilities: user.keyCapabilities,
+      keyUpdatedAt: user.keyUpdatedAt,
     });
   } catch (error) {
     console.error('Get public key error:', error);

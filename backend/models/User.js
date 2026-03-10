@@ -40,6 +40,20 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  // ML-KEM (Kyber) public key for post-quantum key establishment (Level 4)
+  mlkemPublicKey: {
+    type: String,
+    default: null,
+  },
+  // Declared cryptographic capabilities for negotiation / UI
+  keyCapabilities: {
+    type: [String],
+    default: [],
+  },
+  keyUpdatedAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

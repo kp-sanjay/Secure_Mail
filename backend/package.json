@@ -8,25 +8,31 @@
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-  "keywords": ["e2ee", "email", "encryption"],
+  "keywords": [
+    "e2ee",
+    "email",
+    "encryption"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
-    "mongoose": "^7.5.0",
-    "jsonwebtoken": "^9.0.2",
-    "bcryptjs": "^2.4.3",
     "argon2": "^0.31.2",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "express-validator": "^7.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "mailparser": "^3.9.4",
+    "ml-isolation-forest": "^0.1.0",
     "ml-matrix": "^6.10.4",
     "ml-naivebayes": "^2.0.0",
-    "ml-xgboost": "^0.1.0",
-    "ml-isolation-forest": "^1.0.0"
+    "ml-xgboost": "^1.1.2",
+    "mongoose": "^7.5.0",
+    "nodemailer": "^8.0.2",
+    "smtp-server": "^3.18.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   }
 }
-

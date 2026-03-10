@@ -10,9 +10,14 @@ import ViewEmail from './pages/ViewEmail';
 import Drafts from './pages/Drafts';
 import SecurityDashboard from './pages/SecurityDashboard';
 import ThreadView from './pages/ThreadView';
+import Assistant from './pages/Assistant';
+import Calendar from './pages/Calendar';
+import Messages from './pages/Messages';
+import Call from './pages/Call';
+import HexagonBackground from './components/HexagonBackground';
 
 const PrivateRoute = ({ children }) => {
-  const { loading } = useAuth();
+  const { loading, isAuthenticated } = useAuth();
 
   if (loading) {
     return (
@@ -22,17 +27,23 @@ const PrivateRoute = ({ children }) => {
     );
   }
 
-  // Allow access even without authentication (guest mode)
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
   return children;
 };
 
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+      <div className="relative min-h-screen">
+        <HexagonBackground />
+        <div className="relative">
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
           <Route
             path="/inbox"
             element={
@@ -103,9 +114,51 @@ function App() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/assistant"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <Assistant />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <Calendar />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/messages"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <Messages />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/call"
+            element={
+              <PrivateRoute>
+                <Layout>
+                  <Call />
+                </Layout>
+              </PrivateRoute>
+            }
+          />
           <Route path="/" element={<Navigate to="/inbox" />} />
-        </Routes>
-      </Router>
+            </Routes>
+          </Router>
+        </div>
+      </div>
     </AuthProvider>
   );
 }

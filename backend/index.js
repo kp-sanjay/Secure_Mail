@@ -23,6 +23,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/emails', require('./routes/emailRoutes'));
+app.use('/api/qrng', require('./routes/qrngRoutes'));
+app.use('/api/kms', require('./routes/kmsRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/calendar', require('./routes/calendarRoutes'));
 
 // Health check route
 app.get('/health', (req, res) => {
@@ -47,4 +51,12 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
+
+// Optional: start inbound SMTP listener (stores received messages into MongoDB)
+try {
+  const { startInboundSmtpServer } = require('./services/smtpReceiver');
+  startInboundSmtpServer();
+} catch (e) {
+  console.warn('SMTP inbound server not started:', e?.message || e);
+}
 

@@ -9,9 +9,15 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background: #030303;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* Portal-style card */
+.portal-card {
+  @apply bg-neutral-950/70 border border-forest-500/30 rounded shadow-sm backdrop-blur text-gray-100;
 }
 

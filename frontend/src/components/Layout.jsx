@@ -1,6 +1,18 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+const navItems = [
+  { to: '/inbox', label: 'Secure Inbox' },
+  { to: '/sent', label: 'Secure Sent' },
+  { to: '/compose', label: 'Compose' },
+  { to: '/drafts', label: 'Drafts' },
+  { to: '/messages', label: 'Personal Messages' },
+  { to: '/call', label: 'Secure Calls' },
+  { to: '/assistant', label: 'Quantum Assistant' },
+  { to: '/calendar', label: 'Calendar' },
+  { to: '/dashboard', label: 'Security Dashboard' },
+];
+
 const Layout = ({ children }) => {
   const { user, logout, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -12,102 +24,79 @@ const Layout = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-primary-600">E2EE Email</h1>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  to="/inbox"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                    location.pathname === '/inbox'
-                      ? 'border-primary-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+    <div className="min-h-screen flex flex-col relative">
+      {/* Top portal banner */}
+      <header className="bg-black/90 text-white border-b border-forest-500/50 backdrop-blur">
+        <div className="flex justify-between items-center h-14 px-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold tracking-tight">QDK Mail</h1>
+            <span className="hidden sm:inline text-gray-300 text-sm font-normal">
+              Quantum Secure Mail Client
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            {isAuthenticated ? (
+              <>
+                <span className="text-sm text-gray-200">{user?.name || user?.email}</span>
+                <button
+                  onClick={handleLogout}
+                  className="text-sm px-3 py-1 rounded border border-forest-500/60 hover:bg-white/5 hover:border-forest-400 transition"
                 >
-                  Inbox
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/login"
+                  className="text-sm text-gray-200 hover:text-white px-3 py-1 rounded border border-forest-500/60 hover:border-forest-400 transition"
+                >
+                  Login
                 </Link>
                 <Link
-                  to="/sent"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                    location.pathname === '/sent'
-                      ? 'border-primary-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  to="/register"
+                  className="text-sm bg-forest-500 text-black px-4 py-1 rounded hover:bg-forest-400 transition font-semibold"
                 >
-                  Sent
+                  Sign Up
                 </Link>
-                <Link
-                  to="/compose"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                    location.pathname === '/compose'
-                      ? 'border-primary-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Compose
-                </Link>
-                <Link
-                  to="/drafts"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                    location.pathname === '/drafts'
-                      ? 'border-primary-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Drafts
-                </Link>
-                <Link
-                  to="/dashboard"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                    location.pathname === '/dashboard'
-                      ? 'border-primary-500 text-gray-900'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Security Dashboard
-                </Link>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              {isAuthenticated ? (
-                <>
-                  <span className="text-sm text-gray-700">{user?.name || user?.email}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="text-sm text-gray-500 hover:text-gray-700"
-                  >
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded hover:bg-gray-100"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="text-sm bg-primary-600 text-white px-4 py-1 rounded hover:bg-primary-700"
-                  >
-                    Sign Up
-                  </Link>
-                </>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
-      </nav>
-      {children}
+      </header>
+
+      <div className="flex flex-1 relative">
+        {/* Left sidebar - only when authenticated */}
+        {isAuthenticated && (
+          <aside className="w-56 bg-black/60 backdrop-blur border-r border-forest-500/20 flex-shrink-0">
+            <nav className="py-4 px-2">
+              {navItems.map(({ to, label }) => {
+                const active = location.pathname === to;
+                return (
+                  <Link
+                    key={to}
+                    to={to}
+                    className={`block px-3 py-2 mb-1 text-sm font-medium rounded transition ${
+                      active
+                        ? 'bg-black/70 text-white border border-forest-500/50'
+                        : 'text-gray-200 hover:bg-white/5'
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </aside>
+        )}
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto relative">
+          <div className="relative">{children}</div>
+        </main>
+      </div>
     </div>
   );
 };
 
 export default Layout;
-

@@ -23,39 +23,39 @@ const ThreadEmailItem = ({ email, index, isLast, decryptEmail, formatDate }) => 
   };
 
   return (
-    <div className="px-6 py-4 hover:bg-gray-50 transition">
+    <div className="px-6 py-4 hover:bg-white/5 transition">
       <div className="flex justify-between items-start mb-2">
         <div>
-          <p className="font-semibold text-gray-900">
+          <p className="font-semibold text-gray-100">
             {email.sender?.name || email.sender?.email || 'Unknown'}
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-400">
             To: {email.receiver?.email || 'Unknown'}
           </p>
         </div>
-        <p className="text-sm text-gray-500">{formatDate(email.timestamp)}</p>
+        <p className="text-sm text-gray-400">{formatDate(email.timestamp)}</p>
       </div>
       
       {decrypted ? (
         <div className="mt-4">
-          <p className="font-medium text-gray-900 mb-2">{decrypted.subject}</p>
-          <p className="text-gray-700 whitespace-pre-wrap">{decrypted.body}</p>
+          <p className="font-medium text-gray-100 mb-2">{decrypted.subject}</p>
+          <p className="text-gray-200 whitespace-pre-wrap">{decrypted.body}</p>
         </div>
       ) : (
         <div className="mt-4">
           <button
             onClick={handleDecrypt}
             disabled={decrypting}
-            className="text-primary-600 hover:text-primary-700 text-sm disabled:opacity-50"
+            className="text-forest-300 hover:text-forest-400 text-sm disabled:opacity-50"
           >
             {decrypting ? 'Decrypting...' : 'Click to decrypt'}
           </button>
-          <p className="text-sm text-gray-500 mt-2">[Encrypted Email]</p>
+          <p className="text-sm text-gray-400 mt-2">[Encrypted Email]</p>
         </div>
       )}
 
       {!isLast && (
-        <div className="mt-4 border-l-2 border-gray-200 pl-4">
+        <div className="mt-4 border-l-2 border-forest-500/20 pl-4">
           <p className="text-xs text-gray-400">Reply</p>
         </div>
       )}
@@ -65,7 +65,7 @@ const ThreadEmailItem = ({ email, index, isLast, decryptEmail, formatDate }) => 
 
 const ThreadEmailsList = ({ thread, decryptEmail, formatDate }) => {
   return (
-    <div className="divide-y divide-gray-200">
+    <div className="divide-y divide-white/10">
       {thread.map((email, index) => (
         <ThreadEmailItem
           key={email._id}
@@ -152,13 +152,13 @@ const ThreadView = () => {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <p className="text-gray-500 mb-4">Please login to view threads</p>
+      <div className="p-6">
+        <div className="max-w-4xl mx-auto">
+          <div className="portal-card p-8 text-center">
+            <p className="text-gray-300 mb-4">Please login to view threads</p>
             <button
               onClick={() => navigate('/login')}
-              className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+              className="bg-forest-500 text-black px-4 py-2 rounded hover:bg-forest-400 transition font-semibold"
             >
               Login
             </button>
@@ -169,33 +169,33 @@ const ThreadView = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="p-6">
+      <div className="max-w-4xl mx-auto">
         <div className="mb-4">
           <button
             onClick={() => navigate('/inbox')}
-            className="text-primary-600 hover:text-primary-700"
+            className="text-forest-300 hover:text-forest-400 font-medium"
           >
             ← Back to Inbox
           </button>
         </div>
 
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-gray-900">Thread Conversation</h1>
+        <div className="portal-card">
+          <div className="px-6 py-4 border-b border-forest-500/20">
+            <h1 className="text-xl font-bold text-gray-100">Thread Conversation</h1>
           </div>
 
           {loading ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">Loading thread...</p>
+              <p className="text-gray-300">Loading thread...</p>
             </div>
           ) : error ? (
             <div className="p-8 text-center">
-              <p className="text-red-500">{error}</p>
+              <p className="text-red-400">{error}</p>
             </div>
           ) : thread.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">No messages in this thread</p>
+              <p className="text-gray-300">No messages in this thread</p>
             </div>
           ) : (
             <ThreadEmailsList thread={thread} decryptEmail={decryptEmail} formatDate={formatDate} />

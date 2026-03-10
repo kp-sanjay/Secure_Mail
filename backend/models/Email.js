@@ -11,17 +11,37 @@ const emailSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  // Versioned envelope supporting security Levels 1-4 (SMTP/plain, quantum-aided AES, OTP, PQC Kyber/ML-KEM)
+  envelope: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null,
+  },
+  securityLevel: {
+    type: Number,
+    default: null,
+  },
+  transport: {
+    type: String,
+    enum: ['api', 'smtp'],
+    default: 'api',
+  },
+  smtpMessageId: {
+    type: String,
+    default: null,
+  },
+  // Legacy storage fields (kept for backward compatibility and migration).
+  // When `envelope` is present, these may be empty/null.
   encryptedSubject: {
     type: String,
-    required: true,
+    default: '',
   },
   encryptedBody: {
     type: String,
-    required: true,
+    default: '',
   },
   encryptedAESKey: {
     type: String,
-    required: true,
+    default: '',
   },
   // ECDH session key (alternative to RSA-encrypted AES key)
   encryptedECDHKey: {

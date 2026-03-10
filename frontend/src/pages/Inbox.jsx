@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { emailAPI } from '../utils/api';
 import { decryptRSA, importAESKey, decryptAES, decryptAESWithNonce } from '../utils/crypto';
+import { decryptEnvelope } from '../utils/envelope';
 
 const Inbox = () => {
   const [emails, setEmails] = useState([]);
@@ -11,7 +12,7 @@ const Inbox = () => {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'thread'
-  const { user, privateKey } = useAuth();
+  const { user, privateKey, mlkemSecretKeyB64 } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -62,6 +63,14 @@ const Inbox = () => {
 
   const decryptEmail = async (email) => {
     try {
+      if (email.envelope) {
+        return await decryptEnvelope({
+          envelope: email.envelope,
+          rsaPrivateKey: privateKey,
+          mlkemSecretKeyB64,
+        });
+      }
+
       // Decrypt AES key using private RSA key
       const aesKeyBase64 = await decryptRSA(privateKey, email.encryptedAESKey);
       const aesKey = await importAESKey(aesKeyBase64);
@@ -136,15 +145,15 @@ const Inbox = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
+    <div className="p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="portal-card">
+          <div className="px-6 py-4 border-b border-forest-500/20">
             <div className="flex justify-between items-center mb-4">
-              <h1 className="text-2xl font-bold text-gray-900">Inbox</h1>
+              <h1 className="text-xl font-bold text-gray-100">Secure Inbox</h1>
               <button
                 onClick={() => navigate('/compose')}
-                className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+                className="bg-forest-500 text-black px-4 py-2 rounded hover:bg-forest-400 transition font-semibold"
               >
                 Compose
               </button>
@@ -155,12 +164,12 @@ const Inbox = () => {
                 placeholder="Search emails..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
               />
               <select
                 value={viewMode}
                 onChange={(e) => setViewMode(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                className="px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange"
               >
                 <option value="list">List View</option>
                 <option value="thread">Thread View</option>
@@ -170,25 +179,25 @@ const Inbox = () => {
 
           {!user ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500 mb-4">Please login to view your inbox</p>
+              <p className="text-gray-300 mb-4">Please login to view your inbox</p>
               <button
                 onClick={() => navigate('/login')}
-                className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition"
+                className="bg-forest-500 text-black px-4 py-2 rounded hover:bg-forest-400 transition font-semibold"
               >
                 Login
               </button>
             </div>
           ) : loading ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">Loading inbox...</p>
+              <p className="text-gray-300">Loading inbox...</p>
             </div>
           ) : error ? (
             <div className="p-8 text-center">
-              <p className="text-red-500">{error}</p>
+              <p className="text-red-400">{error}</p>
             </div>
           ) : emails.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-gray-500">No emails in inbox</p>
+              <p className="text-gray-300">No emails in inbox</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
@@ -196,16 +205,16 @@ const Inbox = () => {
                 <div
                   key={email._id}
                   onClick={() => handleThreadClick(email)}
-                  className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition"
+                  className="px-6 py-4 hover:bg-white/5 cursor-pointer transition"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
-                        <p className="font-semibold text-gray-900">
+                        <p className="font-semibold text-gray-100">
                           {email.sender?.name || email.sender?.email || 'Unknown'}
                         </p>
                         {!email.isRead && (
-                          <span className="w-2 h-2 bg-primary-600 rounded-full"></span>
+                          <span className="w-2 h-2 bg-forest-400 rounded-full"></span>
                         )}
                         {email.isThread && (
                           <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
@@ -227,7 +236,7 @@ const Inbox = () => {
                         [Encrypted Email]
                       </p>
                     </div>
-                    <p className="text-sm text-gray-500">{formatDate(email.timestamp)}</p>
+                    <p className="text-sm text-gray-400">{formatDate(email.timestamp)}</p>
                   </div>
                 </div>
               ))}
