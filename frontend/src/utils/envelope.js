@@ -49,6 +49,21 @@ function resolveKemName(envelope) {
   if (kem === 'ML-KEM-768' || kem === 'MLKEM768') return 'ML-KEM-768';
   const info = envelope?.kdf?.info || '';
   if (String(info).includes('MLKEM768') || String(info).includes('768')) return 'ML-KEM-768';
+  // Metadata sometimes drifts in older envelopes. Infer variant from ciphertext length:
+  // - ML-KEM-768 ciphertext: 1088 bytes
+  // - ML-KEM-1024 ciphertext: 1568 bytes
+  const ctB64 = envelope?.key?.mlkem?.ctB64 || envelope?.key?.ctB64 || envelope?.ciphertextB64;
+  if (ctB64 && typeof ctB64 === 'string') {
+    try {
+      const bin = atob(ctB64);
+      const len = bin.length;
+      if (len === 1088) return 'ML-KEM-768';
+      if (len === 1568) return 'ML-KEM-1024';
+    } catch {
+      /* ignore */
+    }
+  }
+
   return 'ML-KEM-1024';
 }
 
@@ -132,7 +147,8 @@ export async function encryptEnvelope({
     const kemVariant = inferMlKemVariantFromPublicKeyB64(receiverMlKemPublicKeyB64) || 'ML-KEM-1024';
     const { ciphertextB64, sharedSecretB64 } = await mlkemEncapBase64(receiverMlKemPublicKeyB64, kemVariant);
 
-    const info = 'QDK-L2-QuantumAided-Kyber-v2';
+    const info =
+      kemVariant === 'ML-KEM-768' ? 'QDK-L2-QuantumAided-Kyber768-v2' : 'QDK-L2-QuantumAided-Kyber-v2';
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
     const encSubject = await encryptAES(aesKey, subject);
@@ -170,7 +186,7 @@ export async function encryptEnvelope({
     const { ciphertextB64, sharedSecretB64 } = await mlkemEncapBase64(receiverMlKemPublicKeyB64, kemVariant);
 
     const saltB64 = newSaltB64(16);
-    const info = 'QDK-L4-MLKEM1024-v1';
+    const info = kemVariant === 'ML-KEM-768' ? 'QDK-L4-MLKEM768-v1' : 'QDK-L4-MLKEM1024-v1';
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
     const encSubject = await encryptAES(aesKey, subject);
