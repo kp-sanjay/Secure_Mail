@@ -38,7 +38,10 @@ function App() {
   return (
     <AuthProvider>
       <div className="relative min-h-screen">
-        <HexagonBackground />
+        <HexagonBackground
+          glowColor="rgba(34, 211, 238, 0.55)"
+          borderColor="rgba(15, 23, 42, 0.85)"
+        />
         <div className="relative">
           <Router>
             <Routes>

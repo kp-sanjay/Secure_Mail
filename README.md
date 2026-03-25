@@ -1,16 +1,20 @@
-# E2EE Email Client
+# QDK Mail — Quantum Secure Email Client
 
-A complete End-to-End Encrypted Email Client web application where only the sender and recipient can read messages. All encryption and decryption happens on the client side, and the backend only stores ciphertext.
+A complete End-to-End Encrypted email application with ISRO-style multi-level security. Encryption/decryption happens on the client side; the backend stores ciphertext plus non-sensitive metadata (classification/mission tags).
 
 ## Features
 
-- 🔐 **End-to-End Encryption**: RSA + AES hybrid encryption
-- 🔑 **Client-Side Key Management**: Private keys never leave the client device
-- 👤 **User Authentication**: JWT-based authentication
-- 📧 **Secure Email**: Encrypted subject, body, and AES keys
-- 📬 **Inbox & Sent Box**: View received and sent emails
-- 🎨 **Modern UI**: Responsive design with TailwindCSS
-- 🚀 **Production Ready**: Deployment configurations included
+- 🔐 **Multi-Level Security Architecture**
+  - **Level 1**: Basic SMTP (clear transport; no payload crypto)
+  - **Level 2**: QRNG-seeded HKDF + **CRYSTALS-Kyber (ML-KEM-1024)** key establishment + AES-256-GCM
+  - **Level 4**: **ML-KEM-1024** + AES-256-GCM
+  - **Level 3**: One-Time Pad remains **disabled** (requires separate pad/QKD logistics)
+- 🔑 **Post-Quantum Cryptography on the client**: ML-KEM (Kyber) key establishment + TOFU trust pinning
+- 🧾 **Classification & Mission Tags**: Emails carry `classification`, `missionTag`, and `isFlagged` metadata for ISRO-style routing
+- 📬 **Inbox / Sent / Threads / View**: Envelope-based decrypt for Level 1/2/4 (server stores ciphertext)
+- 🤖 **AI Assistant**: Template-based compose + PQC/SMTP FAQ chatbot
+- 📅 **ISRO Mission Calendar**: Real month grid, sidebar event creation, and color-coded mission event types (backed by MongoDB)
+- 🖥️ **Electron Desktop (optional)**: OS keychain integration for private key storage
 
 ## Tech Stack
 
@@ -21,6 +25,12 @@ A complete End-to-End Encrypted Email Client web application where only the send
 - React Router
 - Axios
 - Web Crypto API
+- framer-motion (animated hexagon background / ISRO UI)
+- mlkem (browser Kyber / ML-KEM support)
+
+### Desktop (optional)
+- Electron
+- keytar (OS keychain integration)
 
 ### Backend
 - Node.js
@@ -40,24 +50,37 @@ A complete End-to-End Encrypted Email Client web application where only the send
 ## Project Structure
 
 ```
-E2EE Email/
+QDK MAIL/
 ├── backend/
 │   ├── config/
 │   │   └── database.js
 │   ├── controllers/
 │   │   ├── authController.js
 │   │   ├── emailController.js
-│   │   └── userController.js
+│   │   ├── userController.js
+│   │   ├── kmsController.js
+│   │   ├── qrngController.js
+│   │   ├── aiController.js
+│   │   └── calendarController.js
 │   ├── middleware/
 │   │   └── auth.js
 │   ├── models/
 │   │   ├── User.js
-│   │   └── Email.js
+│   │   ├── Email.js
+│   │   ├── KeyBundle.js
+│   │   └── CalendarEvent.js
 │   ├── routes/
 │   │   ├── authRoutes.js
 │   │   ├── emailRoutes.js
-│   │   └── userRoutes.js
+│   │   ├── userRoutes.js
+│   │   ├── qrngRoutes.js
+│   │   ├── kmsRoutes.js
+│   │   ├── aiRoutes.js
+│   │   └── calendarRoutes.js
 │   ├── index.js
+│   ├── services/
+│   │   ├── smtpSender.js
+│   │   └── smtpReceiver.js
 │   ├── package.json
 │   └── .env.example
 ├── frontend/
@@ -73,10 +96,19 @@ E2EE Email/
 │   │   │   ├── Inbox.jsx
 │   │   │   ├── Sent.jsx
 │   │   │   ├── Compose.jsx
-│   │   │   └── ViewEmail.jsx
+│   │   │   ├── Drafts.jsx
+│   │   │   ├── ThreadView.jsx
+│   │   │   ├── ViewEmail.jsx
+│   │   │   ├── SecurityDashboard.jsx
+│   │   │   ├── Assistant.jsx
+│   │   │   ├── Calendar.jsx
+│   │   │   ├── Messages.jsx
+│   │   │   └── Call.jsx
 │   │   ├── utils/
 │   │   │   ├── api.js
-│   │   │   └── crypto.js
+│   │   │   ├── crypto.js
+│   │   │   ├── envelope.js
+│   │   │   └── pqc.js
 │   │   ├── App.jsx
 │   │   ├── main.jsx
 │   │   └── index.css
@@ -85,6 +117,10 @@ E2EE Email/
 │   ├── vite.config.js
 │   ├── tailwind.config.js
 │   └── postcss.config.js
+├── desktop/
+│   ├── main.cjs
+│   ├── preload.cjs
+│   └── package.json
 └── README.md
 ```
 
@@ -158,32 +194,34 @@ The frontend will run on `http://localhost:5173`
 ## How It Works
 
 ### Encryption Flow
+1. **User Registration/Login**
+   - On signup/login, the client generates:
+     - RSA keypair (legacy compatibility / fallback metadata)
+     - ML-KEM keypair (Kyber) used for post-quantum Level 2/4
+   - The private key bundle is encrypted with the user password and stored locally (and mirrored to OS keychain in Electron).
+   - Public keys are published to the server/KMS directory.
 
-1. **User Registration/Login**:
-   - User registers or logs in
-   - RSA key pair is generated on the client
-   - Private key is encrypted with user's password and stored locally
-   - Public key is uploaded to the server
+2. **Sending Email**
+   - User composes an email and selects a security level.
+   - **Level 1**: SMTP relay without payload encryption.
+   - **Level 2 (Kyber + QRNG)**:
+     - Backend returns a simulated QRNG seed (`/api/qrng/seed`)
+     - Seed is used as HKDF salt while ML-KEM encapsulation yields a shared secret
+     - Shared secret -> HKDF -> AES-256-GCM key; subject/body are encrypted into an envelope.
+   - **Level 4**:
+     - ML-KEM-1024 encapsulation + HKDF -> AES-256-GCM encryption into an envelope.
+   - Email metadata includes `classification` and `missionTag` (non-sensitive).
 
-2. **Sending Email**:
-   - User composes an email
-   - AES key is generated for the message
-   - Email subject and body are encrypted with AES
-   - AES key is encrypted with receiver's public RSA key
-   - Only encrypted data is sent to the server
-
-3. **Receiving Email**:
-   - Encrypted email is fetched from server
-   - AES key is decrypted using receiver's private RSA key
-   - Email subject and body are decrypted using AES key
-   - Plaintext is displayed to the user
+3. **Receiving Email**
+   - The client fetches the envelope ciphertext from MongoDB.
+   - Decryption happens locally using the receiver's stored ML-KEM secret key (Level 2/4).
+   - Legacy envelopes that used RSA-OAEP-wrapped AES keys remain decryptable.
 
 ### Security Features
-
-- **Zero-Knowledge Architecture**: Server never sees plaintext
-- **Client-Side Encryption**: All encryption/decryption happens in the browser
-- **Password-Protected Private Keys**: Private keys are encrypted with user password
-- **RSA + AES Hybrid**: RSA for key exchange, AES for message encryption
+- **Zero-Knowledge Architecture**: Server never sees plaintext email subject/body
+- **Client-Side Encryption/Decryption**: All cryptography happens in the browser
+- **Post-Quantum Key Establishment**: ML-KEM (Kyber) used for Level 2/4
+- **TOFU Trust Pinning**: Warns the sender when recipient keys change
 - **HTTPS Required**: All production traffic must use HTTPS
 
 ## API Endpoints
@@ -202,6 +240,25 @@ The frontend will run on `http://localhost:5173`
 - `GET /api/emails/inbox` - Get inbox emails (protected)
 - `GET /api/emails/sent` - Get sent emails (protected)
 - `GET /api/emails/:id` - Get single email (protected)
+
+### Calendar
+- `GET /api/calendar` - List calendar events (protected)
+- `POST /api/calendar` - Create a calendar event (protected)
+- `PUT /api/calendar/:id` - Update a calendar event (protected)
+- `DELETE /api/calendar/:id` - Delete a calendar event (protected)
+
+### Quantum RNG (simulated on backend)
+- `GET /api/qrng/seed?bytes=32` - Returns simulated QRNG seed bytes (protected)
+
+### Key Management Service (KMS)
+- `PUT /api/kms/keys` - Publish keys (protected)
+- `GET /api/kms/me` - Get my keys (protected)
+- `GET /api/kms/keys/:email` - Get keys by email (protected)
+- `POST /api/kms/revoke` - Revoke keys (protected)
+
+### AI Assistant
+- `POST /api/ai/compose` - Generate a professional email draft (protected)
+- `POST /api/ai/chat` - FAQ chatbot for KYBER/QRNG/SMTP/key setup (protected)
 
 ## Deployment
 
@@ -250,12 +307,11 @@ After deployment, update:
 - Backend `.env` or Render environment variables with production frontend URL
 
 ## Future Enhancements
-
-The following modules are placeholders for future implementation:
-
-- **Attachments Encryption**: Encrypt file attachments before sending
-- **Self-Destruct Timer**: Auto-delete emails after a set time
-- **QR-Based Key Sharing**: Share public keys via QR codes
+- **Attachments Encryption**: Encrypt file attachments before sending (E2EE)
+- **Self-Destruct / Expiry**: Auto-delete or enforce time-bounded viewing for classified content
+- **OTP / One-Time Pad (Level 3)**: Requires real pad/key logistics (e.g., QKD + synchronized pad distribution)
+- **Post-Quantum Signatures (Dilithium / ML-DSA)**: Signed envelopes for non-repudiation and integrity binding
+- **Encrypted Search / Privacy-Preserving Indexing**: Encrypted indexing without leaking keywords
 
 ## Security Considerations
 

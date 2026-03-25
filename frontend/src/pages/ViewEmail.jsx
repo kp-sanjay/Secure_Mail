@@ -9,7 +9,7 @@ const ViewEmail = () => {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, privateKey, mlkemSecretKeyB64 } = useAuth();
+  const { user, privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64 } = useAuth();
   const [email, setEmail] = useState(null);
   const [decrypted, setDecrypted] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +58,7 @@ const ViewEmail = () => {
           envelope: emailData.envelope,
           rsaPrivateKey: privateKey,
           mlkemSecretKeyB64,
+          mlkem768SecretKeyB64,
         });
         setDecrypted(dec);
         return;
@@ -89,7 +90,7 @@ const ViewEmail = () => {
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center">
-        <p className="text-gray-500">Loading email...</p>
+        <p className="text-slate-500">Loading email...</p>
       </div>
     );
   }
@@ -113,7 +114,7 @@ const ViewEmail = () => {
   if (!email) {
     return (
       <div className="p-6 flex items-center justify-center">
-        <p className="text-gray-500">Email not found</p>
+        <p className="text-slate-500">Email not found</p>
       </div>
     );
   }
@@ -144,19 +145,35 @@ const ViewEmail = () => {
 
           {level != null && (
             <div className="mb-4 flex flex-wrap gap-2">
-              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                level === 1 ? 'bg-gray-200 text-gray-800' :
-                level === 2 ? 'bg-blue-100 text-blue-800' :
-                level === 4 ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-700'
-              }`}>
-                Security Level {level}
-                {level === 4 && ' (Post-Quantum)'}
-                {level === 2 && ' (Quantum-Aided AES)'}
-                {level === 1 && ' (Basic SMTP)'}
+              <span
+                className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-medium border ${
+                  level === 1
+                    ? 'border-slate-600 bg-slate-900/80 text-slate-300'
+                    : level === 2
+                      ? 'border-cyan-500/40 bg-cyan-950/40 text-cyan-200'
+                      : level === 4
+                        ? 'border-isro-orange/50 bg-isro-orange/10 text-isro-orange'
+                        : 'border-slate-600 text-slate-400'
+                }`}
+              >
+                Level {level}
+                {level === 4 && ' · ML-KEM-1024'}
+                {level === 2 && ' · QRNG + Kyber'}
+                {level === 1 && ' · Clear channel'}
               </span>
-              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700">
+              <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-medium border border-slate-600 text-slate-400">
                 Transport: {transport.toUpperCase()}
               </span>
+              {email.missionTag ? (
+                <span className="text-[10px] px-2 py-1 rounded border border-cyan-500/40 text-cyan-300">
+                  {email.missionTag}
+                </span>
+              ) : null}
+              {email.classification ? (
+                <span className="text-[10px] px-2 py-1 rounded border border-isro-orange/50 text-isro-orange">
+                  {String(email.classification).replace('_', ' ')}
+                </span>
+              ) : null}
             </div>
           )}
 
@@ -181,13 +198,13 @@ const ViewEmail = () => {
 
           <div className="prose max-w-none">
             {decrypted ? (
-              <div className="whitespace-pre-wrap text-gray-900">{decrypted.body}</div>
+              <div className="whitespace-pre-wrap text-slate-200 leading-relaxed">{decrypted.body}</div>
             ) : isSender ? (
-              <div className="text-gray-500 italic">
+              <div className="text-slate-500 italic">
                 You sent this email. Only the recipient can decrypt and read it.
               </div>
             ) : (
-              <div className="text-gray-500 italic">
+              <div className="text-slate-500 italic">
                 Unable to decrypt email. Your private key may not be loaded.
               </div>
             )}

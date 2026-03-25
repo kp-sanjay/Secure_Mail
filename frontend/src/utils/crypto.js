@@ -125,6 +125,27 @@ export async function importPrivateKey(pemKey) {
 }
 
 /**
+ * Derive RSA-OAEP public CryptoKey from a private key (for re-publishing after ML-KEM migration).
+ */
+export async function exportPublicKeyFromPrivateRSA(privateKey) {
+  const jwk = await window.crypto.subtle.exportKey('jwk', privateKey);
+  delete jwk.d;
+  delete jwk.dp;
+  delete jwk.dq;
+  delete jwk.p;
+  delete jwk.q;
+  delete jwk.qi;
+  jwk.key_ops = ['encrypt'];
+  return window.crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSA-OAEP', hash: 'SHA-256' },
+    true,
+    ['encrypt']
+  );
+}
+
+/**
  * Generate AES key for message encryption
  * @returns {Promise<CryptoKey>}
  */

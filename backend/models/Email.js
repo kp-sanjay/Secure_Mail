@@ -104,6 +104,23 @@ const emailSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  /** Data classification (mission-style labeling) */
+  classification: {
+    type: String,
+    enum: ['UNCLASSIFIED', 'RESTRICTED', 'SECRET', 'TOP_SECRET'],
+    default: 'UNCLASSIFIED',
+  },
+  /** Mission / program tag (e.g. Chandrayaan-4, Gaganyaan) */
+  missionTag: {
+    type: String,
+    default: null,
+    trim: true,
+    maxlength: 80,
+  },
+  isFlagged: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 // Index for efficient queries

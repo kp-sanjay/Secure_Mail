@@ -62,8 +62,7 @@ export const emailAPI = {
   deleteDraft: (id) => api.delete(`/emails/draft/${id}`),
   searchEmails: (query, folder) => api.get('/emails/search', { params: { query, folder } }),
   getThread: (threadId) => api.get(`/emails/thread/${threadId}`),
-  updateEmailCategory: (id, category, securityScore) =>
-    api.put(`/emails/${id}/category`, { category, securityScore }),
+  updateEmailCategory: (id, body) => api.put(`/emails/${id}/category`, body),
 };
 
 // Quantum RNG API (currently simulated on backend)

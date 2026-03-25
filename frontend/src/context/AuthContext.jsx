@@ -7,8 +7,9 @@ import {
   importPrivateKey,
   encryptPrivateKeyWithPassword,
   decryptPrivateKeyWithPassword,
+  exportPublicKeyFromPrivateRSA,
 } from '../utils/crypto';
-import { mlkemGenerateKeyPairBase64 } from '../utils/pqc';
+import { mlkemGenerateKeyPairBase64, inferMlKemVariantFromSecretKeyB64 } from '../utils/pqc';
 
 const AuthContext = createContext();
 
@@ -25,6 +26,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [privateKey, setPrivateKey] = useState(null);
   const [mlkemSecretKeyB64, setMlkemSecretKeyB64] = useState(null);
+  /** Legacy ML-KEM-768 secret (after upgrade); used only to open older envelopes */
+  const [mlkem768SecretKeyB64, setMlkem768SecretKeyB64] = useState(null);
 
   // Check if user is logged in on mount
   useEffect(() => {
@@ -86,9 +89,15 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   };
 
-  const register = async (name, email, password) => {
+  const register = async (name, email, password, extra = {}) => {
     try {
-      const response = await authAPI.register({ name, email, password });
+      const response = await authAPI.register({
+        name,
+        email,
+        password,
+        department: extra.department,
+        jobRole: extra.jobRole,
+      });
       const { token, ...userData } = response.data;
 
       localStorage.setItem('token', token);
@@ -137,15 +146,16 @@ export const AuthProvider = ({ children }) => {
       const publicKeyPEM = await exportPublicKey(keyPair.publicKey);
       const privateKeyPEM = await exportPrivateKey(keyPair.privateKey);
 
-      // Generate ML-KEM (Kyber/ML-KEM-768) key pair for Level 4
+      // ML-KEM-1024 (CRYSTALS-Kyber) for Level 2 & 4 key establishment
       const { publicKeyB64: mlkemPublicKey, secretKeyB64: mlkemSecretKey } =
         await mlkemGenerateKeyPairBase64();
 
       // Encrypt a key bundle with password (reuses the same PBKDF2 + AES-GCM wrapper)
       const keyBundleJson = JSON.stringify({
-        v: 1,
+        v: 2,
         rsaPrivateKeyPEM: privateKeyPEM,
         mlkemSecretKeyB64: mlkemSecretKey,
+        mlkem768SecretKeyB64: null,
       });
       const encryptedKeyBundle = await encryptPrivateKeyWithPassword(keyBundleJson, password);
 
@@ -158,7 +168,7 @@ export const AuthProvider = ({ children }) => {
       const publishPayload = {
         publicKey: publicKeyPEM,
         mlkemPublicKey,
-        keyCapabilities: ['rsa-oaep-2048', 'mlkem-768'],
+        keyCapabilities: ['rsa-oaep-2048', 'mlkem-1024', 'crystals-kyber-1024'],
       };
       await userAPI.updatePublicKey(publishPayload);
       // Best-effort publish into KMS directory (does not break if KMS is down)
@@ -171,6 +181,7 @@ export const AuthProvider = ({ children }) => {
       // Store private key in memory (decrypted)
       setPrivateKey(keyPair.privateKey);
       setMlkemSecretKeyB64(mlkemSecretKey);
+      setMlkem768SecretKeyB64(null);
 
       return { success: true };
     } catch (error) {
@@ -191,19 +202,56 @@ export const AuthProvider = ({ children }) => {
         if (!storedEncryptedKeyBundle) {
           localStorage.setItem('encryptedKeyBundleV1', keyBundleCipher);
         }
-        const bundleJson = await decryptPrivateKeyWithPassword(keyBundleCipher, password);
-        const bundle = JSON.parse(bundleJson);
+        let bundleJson = await decryptPrivateKeyWithPassword(keyBundleCipher, password);
+        let bundle = JSON.parse(bundleJson);
         if (!bundle?.rsaPrivateKeyPEM) throw new Error('Invalid key bundle');
 
-        const rsaPrivateKey = await importPrivateKey(bundle.rsaPrivateKeyPEM);
+        let rsaPrivateKey = await importPrivateKey(bundle.rsaPrivateKeyPEM);
+        let mlkMain = bundle.mlkemSecretKeyB64 || null;
+        let mlkLegacy = bundle.mlkem768SecretKeyB64 || null;
+
+        const variant = inferMlKemVariantFromSecretKeyB64(mlkMain);
+        if (variant === 'ML-KEM-768' && !mlkLegacy) {
+          const { publicKeyB64, secretKeyB64 } = await mlkemGenerateKeyPairBase64();
+          mlkLegacy = mlkMain;
+          mlkMain = secretKeyB64;
+          bundle = {
+            v: 2,
+            rsaPrivateKeyPEM: bundle.rsaPrivateKeyPEM,
+            mlkemSecretKeyB64: mlkMain,
+            mlkem768SecretKeyB64: mlkLegacy,
+          };
+          const encBundle = await encryptPrivateKeyWithPassword(JSON.stringify(bundle), password);
+          localStorage.setItem('encryptedKeyBundleV1', encBundle);
+          await secureStoreSet('encryptedKeyBundleV1', encBundle);
+          const rsaPub = await exportPublicKeyFromPrivateRSA(rsaPrivateKey);
+          const rsaPem = await exportPublicKey(rsaPub);
+          await userAPI.updatePublicKey({
+            publicKey: rsaPem,
+            mlkemPublicKey: publicKeyB64,
+            keyCapabilities: ['rsa-oaep-2048', 'mlkem-1024', 'crystals-kyber-1024'],
+          });
+          try {
+            await kmsAPI.publishKeys({
+              publicKey: rsaPem,
+              mlkemPublicKey: publicKeyB64,
+              keyCapabilities: ['rsa-oaep-2048', 'mlkem-1024', 'crystals-kyber-1024'],
+            });
+          } catch (e) {
+            console.warn('KMS publish after ML-KEM upgrade failed:', e);
+          }
+        }
+
         setPrivateKey(rsaPrivateKey);
-        setMlkemSecretKeyB64(bundle.mlkemSecretKeyB64 || null);
+        setMlkemSecretKeyB64(mlkMain);
+        setMlkem768SecretKeyB64(mlkLegacy);
       } else if (storedEncryptedPrivateKey) {
         // Legacy: Decrypt and load existing RSA private key only
         const privateKeyPEM = await decryptPrivateKeyWithPassword(storedEncryptedPrivateKey, password);
         const rsaPrivateKey = await importPrivateKey(privateKeyPEM);
         setPrivateKey(rsaPrivateKey);
         setMlkemSecretKeyB64(null);
+        setMlkem768SecretKeyB64(null);
       } else {
         // Generate new keys if they don't exist
         await initializeKeys(password);
@@ -222,12 +270,14 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setPrivateKey(null);
     setMlkemSecretKeyB64(null);
+    setMlkem768SecretKeyB64(null);
   };
 
   const value = {
     user,
     privateKey,
     mlkemSecretKeyB64,
+    mlkem768SecretKeyB64,
     loading,
     register,
     login,

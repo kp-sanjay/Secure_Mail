@@ -2,21 +2,22 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { emailAPI, qrngAPI, userAPI } from '../utils/api';
-import {
-  // kept for legacy flows if needed later
-  encryptAESWithNonce,
-} from '../utils/crypto';
 import { encryptEnvelope } from '../utils/envelope';
 import { phishingDetector } from '../utils/phishingDetector';
 import { anomalyDetector } from '../utils/anomalyDetector';
 import { getTrustedFingerprints, setTrustedFingerprints } from '../utils/trustStore';
 
+const MISSION_TAGS = ['', 'Chandrayaan-4', 'Gaganyaan', 'ADITYA-L1', 'NISAR', 'PSLV-C61', 'EOS-06'];
+
 const Compose = () => {
   const location = useLocation();
+
   const [formData, setFormData] = useState({
     receiverEmail: '',
     subject: '',
     body: '',
+    classification: 'UNCLASSIFIED',
+    missionTag: '',
   });
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -33,8 +34,10 @@ const Compose = () => {
       const draft = location.state.draft;
       setFormData({
         receiverEmail: draft.receiver?.email || '',
-        subject: draft.encryptedSubject || '', // Note: Would need to decrypt in production
-        body: draft.encryptedBody || '', // Note: Would need to decrypt in production
+        subject: draft.encryptedSubject || '',
+        body: draft.encryptedBody || '',
+        classification: draft.classification || 'UNCLASSIFIED',
+        missionTag: draft.missionTag || '',
       });
     }
   }, [location.state]);
@@ -185,9 +188,10 @@ const Compose = () => {
         envelope,
         securityLevel,
         transport: securityLevel === 1 ? 'smtp' : 'api',
-        // Keep nonce for server-side replay-defense bookkeeping
         nonce: Date.now().toString(),
-        searchIndex: searchIndex,
+        searchIndex,
+        classification: formData.classification,
+        missionTag: formData.missionTag || undefined,
       });
 
       // Success - navigate to sent box
@@ -205,42 +209,68 @@ const Compose = () => {
   };
 
   const levelCards = [
-    { level: 1, label: 'Level 1', desc: 'Basic SMTP', color: 'bg-gray-100 border-gray-300', activeColor: 'ring-2 ring-gray-500' },
-    { level: 2, label: 'Level 2', desc: 'Quantum-Aided AES', color: 'bg-blue-50 border-blue-200', activeColor: 'ring-2 ring-blue-600' },
-    { level: 4, label: 'Level 4', desc: 'Post-Quantum (PQ)', color: 'bg-orange-50 border-orange-200', activeColor: 'ring-2 ring-isro-orange' },
+    {
+      level: 1,
+      label: 'Level 1',
+      desc: 'SMTP relay · no payload crypto',
+      color: 'bg-slate-900/80 border-slate-600 text-slate-200',
+      activeColor: 'ring-2 ring-slate-400 border-cyan-500/40',
+    },
+    {
+      level: 2,
+      label: 'Level 2',
+      desc: 'QRNG salt + CRYSTALS-Kyber ML-KEM-1024 + AES-GCM',
+      color: 'bg-slate-900/80 border-cyan-500/30 text-slate-200',
+      activeColor: 'ring-2 ring-cyan-400',
+    },
+    {
+      level: 4,
+      label: 'Level 4',
+      desc: 'ML-KEM-1024 encaps + AES-GCM (PQ channel)',
+      color: 'bg-slate-900/80 border-isro-orange/40 text-slate-200',
+      activeColor: 'ring-2 ring-isro-orange',
+    },
   ];
 
   return (
     <div className="p-6">
       <div className="max-w-4xl mx-auto">
         <div className="portal-card p-6">
-          <div className="mb-6 flex items-center justify-between border-b border-forest-500/20 pb-4">
-            <h1 className="text-xl font-bold text-gray-100">Compose Email</h1>
-            <span className="text-xs text-gray-400">Security Level: {securityLevel}</span>
+          <div className="mb-6 flex items-center justify-between border-b border-cyan-500/20 pb-4">
+            <div>
+              <h1 className="text-xl font-bold text-slate-100 tracking-tight">Compose transmission</h1>
+              <p className="text-[11px] text-cyan-500/70 mt-1 uppercase tracking-widest">
+                Kyber ML-KEM-1024 · AES-256-GCM
+              </p>
+            </div>
+            <span className="text-xs text-slate-500 whitespace-nowrap">Level {securityLevel}</span>
           </div>
 
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="mb-4 border border-red-500/50 bg-red-950/40 text-red-200 px-4 py-3 rounded text-sm">
               {error}
             </div>
           )}
 
           {securityWarning && (
-            <div className={`mb-4 border px-4 py-3 rounded ${
-              securityWarning.level === 'High' 
-                ? 'bg-red-50 border-red-200 text-red-700'
-                : securityWarning.level === 'Medium'
-                ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
-                : 'bg-blue-50 border-blue-200 text-blue-700'
-            }`}>
+            <div
+              className={`mb-4 border px-4 py-3 rounded text-sm ${
+                securityWarning.level === 'High'
+                  ? 'border-red-500/50 bg-red-950/30 text-red-200'
+                  : securityWarning.level === 'Medium'
+                    ? 'border-isro-orange/50 bg-isro-orange/10 text-isro-orange-light'
+                    : 'border-cyan-500/40 bg-cyan-950/30 text-cyan-200'
+              }`}
+            >
               <strong>Security Warning:</strong> {securityWarning.message}
             </div>
           )}
 
           {trustIssue && (
-            <div className="mb-4 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded">
-              <strong>Key Change Detected:</strong> The recipient’s key fingerprint changed. Only proceed if you verified the new key out-of-band.
-              <div className="mt-3 flex gap-3">
+            <div className="mb-4 border border-isro-orange/50 bg-[#0a1628] text-slate-200 px-4 py-3 rounded text-sm">
+              <strong className="text-isro-orange">Key Change Detected:</strong> Recipient key fingerprints
+              differ from TOFU store. Verify out-of-band before trusting.
+              <div className="mt-3 flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -248,14 +278,14 @@ const Compose = () => {
                     setTrustIssue(null);
                     setError('');
                   }}
-                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition"
+                  className="px-4 py-2 bg-isro-orange/90 text-[#050a14] rounded font-semibold hover:bg-isro-orange transition"
                 >
                   Trust new key
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate('/inbox')}
-                  className="px-4 py-2 border border-yellow-300 rounded-lg text-yellow-900 hover:bg-yellow-100 transition"
+                  className="px-4 py-2 border border-slate-600 rounded hover:border-cyan-500/50 transition"
                 >
                   Cancel
                 </button>
@@ -265,27 +295,69 @@ const Compose = () => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Security Level</label>
-              <div className="grid grid-cols-3 gap-3">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Security level</label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {levelCards.map(({ level, label, desc, color, activeColor }) => (
                   <button
                     key={level}
                     type="button"
                     onClick={() => setSecurityLevel(level)}
                     className={`px-4 py-3 border rounded text-left transition ${color} ${
-                      securityLevel === level ? activeColor : 'hover:opacity-90'
+                      securityLevel === level ? activeColor : 'hover:border-cyan-500/30'
                     }`}
                   >
-                    <span className="font-semibold text-gray-900">{label}</span>
-                    <span className="block text-xs text-gray-600 mt-0.5">{desc}</span>
+                    <span className="font-semibold text-slate-100">{label}</span>
+                    <span className="block text-[11px] text-slate-400 mt-1 leading-snug">{desc}</span>
                   </button>
                 ))}
               </div>
-              <p className="mt-1 text-xs text-gray-500">Level 3 (One-Time Pad) requires QKD setup — coming soon.</p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Level 3 (OTP) requires QKD / pad logistics — not enabled. Transport signing upgrade: ML-DSA
+                (DILITHIUM-3) on roadmap.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="classification" className="block text-sm font-medium text-slate-300 mb-2">
+                  Classification
+                </label>
+                <select
+                  id="classification"
+                  name="classification"
+                  value={formData.classification}
+                  onChange={handleChange}
+                  className="select-glass"
+                >
+                  {['UNCLASSIFIED', 'RESTRICTED', 'SECRET', 'TOP_SECRET'].map((c) => (
+                    <option key={c} value={c} className="bg-[#0a1628]">
+                      {c.replace('_', ' ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="missionTag" className="block text-sm font-medium text-slate-300 mb-2">
+                  Mission tag
+                </label>
+                <select
+                  id="missionTag"
+                  name="missionTag"
+                  value={formData.missionTag}
+                  onChange={handleChange}
+                  className="select-glass"
+                >
+                  {MISSION_TAGS.map((m) => (
+                    <option key={m || 'none'} value={m} className="bg-[#0a1628]">
+                      {m || '— None —'}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div>
-              <label htmlFor="receiverEmail" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="receiverEmail" className="block text-sm font-medium text-slate-300 mb-2">
                 To
               </label>
               <input
@@ -295,13 +367,13 @@ const Compose = () => {
                 value={formData.receiverEmail}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
+                className="input-glass"
                 placeholder="recipient@email.com"
               />
             </div>
 
             <div>
-              <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="subject" className="block text-sm font-medium text-slate-300 mb-2">
                 Subject
               </label>
               <input
@@ -311,13 +383,13 @@ const Compose = () => {
                 value={formData.subject}
                 onChange={handleChange}
                 required
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
-                placeholder="Email subject"
+                className="input-glass"
+                placeholder="Transmission subject"
               />
             </div>
 
             <div>
-              <label htmlFor="body" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="body" className="block text-sm font-medium text-slate-300 mb-2">
                 Message
               </label>
               <textarea
@@ -327,32 +399,32 @@ const Compose = () => {
                 onChange={handleChange}
                 required
                 rows={12}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
-                placeholder="Write your encrypted message here..."
+                className="input-glass min-h-[200px]"
+                placeholder="Encrypted body (plaintext here; ciphertext on the wire)…"
               />
             </div>
 
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-3">
               <button
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={savingDraft || !user}
-                className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 border border-slate-600 rounded text-slate-200 hover:border-cyan-500/40 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {savingDraft ? 'Saving...' : 'Save Draft'}
               </button>
-              <div className="flex space-x-4">
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => navigate('/inbox')}
-                  className="px-6 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 transition"
+                  className="px-6 py-2 border border-slate-600 rounded text-slate-200 hover:border-cyan-500/40 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading || !user}
-                  className="px-6 py-2 bg-forest-500 text-black rounded hover:bg-forest-400 focus:outline-none focus:ring-2 focus:ring-forest-400 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition font-semibold"
+                  className="px-6 py-2 bg-isro-orange/90 text-[#050a14] rounded font-semibold hover:bg-isro-orange focus:outline-none focus:ring-2 focus:ring-isro-orange/50 disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   {loading ? 'Sending...' : 'Send'}
                 </button>

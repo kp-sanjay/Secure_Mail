@@ -40,22 +40,25 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full portal-card p-8">
-        <div className="text-center mb-8 border-b border-gray-200 pb-6">
-          <h1 className="text-2xl font-bold text-isro-navy mb-1">QDK Mail</h1>
-          <p className="text-sm text-gray-600">Quantum Secure Mail Client — Login</p>
+        <div className="text-center mb-8 border-b border-cyan-500/20 pb-6">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-full border-2 border-isro-orange text-isro-orange text-[10px] font-bold mb-3">
+            ISRO
+          </div>
+          <h1 className="text-2xl font-bold text-slate-100 mb-1">QDK Mail</h1>
+          <p className="text-xs text-cyan-500/70 uppercase tracking-widest">Secure access</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+            <div className="border border-red-500/50 bg-red-950/30 text-red-200 px-4 py-3 rounded text-sm">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-1">
               Email
             </label>
             <input
@@ -65,13 +68,13 @@ const Login = () => {
               value={formData.email}
               onChange={handleChange}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
-              placeholder="your@email.com"
+              className="input-glass"
+              placeholder="operator@domain.gov"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-1">
               Password
             </label>
             <input
@@ -81,7 +84,7 @@ const Login = () => {
               value={formData.password}
               onChange={handleChange}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-isro-orange focus:border-isro-orange"
+              className="input-glass"
               placeholder="••••••••"
             />
           </div>
@@ -89,14 +92,14 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-isro-navy text-white py-2 px-4 rounded hover:bg-isro-navy-light focus:outline-none focus:ring-2 focus:ring-isro-orange focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className="w-full bg-isro-orange/90 text-[#050a14] py-2.5 px-4 rounded font-semibold hover:bg-isro-orange focus:outline-none focus:ring-2 focus:ring-isro-orange/50 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Authenticating…' : 'Login'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          Don't have an account?{' '}
+        <p className="mt-6 text-center text-sm text-slate-500">
+          Need clearance?{' '}
           <Link to="/register" className="text-isro-orange hover:text-isro-orange-light font-medium">
             Register
           </Link>
@@ -107,4 +110,3 @@ const Login = () => {
 };
 
 export default Login;
-

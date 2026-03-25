@@ -17,6 +17,18 @@ const userSchema = new mongoose.Schema({
     trim: true,
     match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
   },
+  /** ISRO-style centre / department (display + access context) */
+  department: {
+    type: String,
+    enum: ['SAC', 'URSC', 'VSSC', 'LPSC', 'IIRS', 'NRSC', 'ISAC', 'MCC', 'OTHER'],
+    default: 'SAC',
+  },
+  jobRole: {
+    type: String,
+    default: 'Analyst',
+    trim: true,
+    maxlength: 80,
+  },
   password: {
     type: String,
     required: [true, 'Please provide a password'],

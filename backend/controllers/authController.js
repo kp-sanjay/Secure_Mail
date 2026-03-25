@@ -11,14 +11,22 @@ const generateToken = (id) => {
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
+const DEPTS = ['SAC', 'URSC', 'VSSC', 'LPSC', 'IIRS', 'NRSC', 'ISAC', 'MCC', 'OTHER'];
+
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, department, jobRole } = req.body;
 
     // Validation
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Please provide all fields' });
     }
+
+    const dept = DEPTS.includes(department) ? department : 'SAC';
+    const role =
+      typeof jobRole === 'string' && jobRole.trim().length > 0
+        ? jobRole.trim().slice(0, 80)
+        : 'Analyst';
 
     // Check if user exists
     const userExists = await User.findOne({ email });
@@ -31,6 +39,8 @@ const register = async (req, res) => {
       name,
       email,
       password,
+      department: dept,
+      jobRole: role,
     });
 
     if (user) {
@@ -38,6 +48,8 @@ const register = async (req, res) => {
         _id: user._id,
         name: user.name,
         email: user.email,
+        department: user.department,
+        jobRole: user.jobRole,
         token: generateToken(user._id),
       });
     } else {
@@ -98,6 +110,8 @@ const getMe = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      department: user.department,
+      jobRole: user.jobRole,
       publicKey: user.publicKey,
     });
   } catch (error) {

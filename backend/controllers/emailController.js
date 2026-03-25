@@ -2,6 +2,8 @@ const Email = require('../models/Email');
 const User = require('../models/User');
 const { sendSmtpMail } = require('../services/smtpSender');
 
+const CLASSIFICATIONS = ['UNCLASSIFIED', 'RESTRICTED', 'SECRET', 'TOP_SECRET'];
+
 // @desc    Send an encrypted email
 // @route   POST /api/emails
 // @access  Private
@@ -57,9 +59,9 @@ const sendEmail = async (req, res) => {
 const getInbox = async (req, res) => {
   try {
     const emails = await Email.find({ receiver: req.user._id })
-      .populate('sender', 'name email')
+      .populate('sender', 'name email department jobRole')
       .sort({ timestamp: -1 })
-      .select('envelope securityLevel transport encryptedSubject encryptedBody encryptedAESKey encryptedECDHKey signature nonce timestamp isRead sender threadId category securityScore');
+      .select('envelope securityLevel transport encryptedSubject encryptedBody encryptedAESKey encryptedECDHKey signature nonce timestamp isRead sender threadId category securityScore classification missionTag isFlagged');
 
     res.json(emails);
   } catch (error) {
@@ -74,9 +76,9 @@ const getInbox = async (req, res) => {
 const getSent = async (req, res) => {
   try {
     const emails = await Email.find({ sender: req.user._id })
-      .populate('receiver', 'name email')
+      .populate('receiver', 'name email department jobRole')
       .sort({ timestamp: -1 })
-      .select('envelope securityLevel transport encryptedSubject encryptedBody encryptedAESKey encryptedECDHKey signature nonce timestamp receiver threadId category securityScore');
+      .select('envelope securityLevel transport encryptedSubject encryptedBody encryptedAESKey encryptedECDHKey signature nonce timestamp receiver threadId category securityScore classification missionTag isFlagged');
 
     res.json(emails);
   } catch (error) {
@@ -281,7 +283,7 @@ const getThread = async (req, res) => {
 // @access  Private
 const updateEmailCategory = async (req, res) => {
   try {
-    const { category, securityScore } = req.body;
+    const { category, securityScore, isFlagged, classification } = req.body;
 
     const email = await Email.findById(req.params.id);
 
@@ -303,10 +305,16 @@ const updateEmailCategory = async (req, res) => {
     if (securityScore !== undefined) {
       email.securityScore = securityScore;
     }
+    if (typeof isFlagged === 'boolean') {
+      email.isFlagged = isFlagged;
+    }
+    if (classification && CLASSIFICATIONS.includes(classification)) {
+      email.classification = classification;
+    }
 
     await email.save();
 
-    res.json({ message: 'Email category updated', email });
+    res.json({ message: 'Email updated', email });
   } catch (error) {
     console.error('Update category error:', error);
     res.status(500).json({ message: 'Server error updating category' });
@@ -332,6 +340,9 @@ const sendEmailEnhanced = async (req, res) => {
       threadId,
       inReplyTo,
       searchIndex,
+      classification,
+      missionTag,
+      isFlagged,
     } = req.body;
 
     // Validation
@@ -373,6 +384,13 @@ const sendEmailEnhanced = async (req, res) => {
       finalThreadId = new Date().getTime().toString(); // New thread
     }
 
+    const cls =
+      classification && CLASSIFICATIONS.includes(classification) ? classification : 'UNCLASSIFIED';
+    const tag =
+      typeof missionTag === 'string' && missionTag.trim().length > 0
+        ? missionTag.trim().slice(0, 80)
+        : null;
+
     // Create email
     const email = await Email.create({
       sender: req.user._id,
@@ -389,6 +407,9 @@ const sendEmailEnhanced = async (req, res) => {
       threadId: finalThreadId,
       inReplyTo: inReplyTo || null,
       searchIndex: searchIndex || null,
+      classification: cls,
+      missionTag: tag,
+      isFlagged: Boolean(isFlagged),
       isDraft: false,
     });
 

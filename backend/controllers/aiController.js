@@ -59,29 +59,34 @@ const chat = async (req, res) => {
 
     const faq = [
       {
-        keywords: ['level 4', 'kyber', 'ml-kem', 'pqc'],
+        keywords: ['level 4', 'kyber', 'ml-kem', 'pqc', 'crystals', '1024'],
         answer:
-          'Level 4 uses post-quantum key establishment (ML-KEM/Kyber) plus AES-GCM for message encryption. Make sure both users have published ML-KEM public keys, and you have your ML-KEM secret key loaded (login password decrypts your key bundle).',
+          'Level 4 uses NIST ML-KEM-1024 (CRYSTALS-Kyber) for key encapsulation: the sender runs encapsulation against the recipient’s public key, derives an AES-256-GCM key with HKDF-SHA256, and encrypts subject/body. Old mail may show ML-KEM-768 in metadata; new traffic uses 1024-bit parameters.',
       },
       {
         keywords: ['level 2', 'quantum', 'qrng'],
         answer:
-          'Level 2 derives an AES key from a quantum-random seed (currently simulated QRNG on the server), then transports that AES key to the recipient using RSA-OAEP. Configure a real QRNG provider later by replacing the simulated seed endpoint.',
+          'Level 2 is “quantum-aided” channel hardening: a random seed from the QRNG endpoint is used as HKDF salt while the IKM comes from an ML-KEM-1024 shared secret. RSA-OAEP wrapping is legacy only; new envelopes use Kyber + HKDF + AES-GCM.',
       },
       {
         keywords: ['smtp', 'level 1'],
         answer:
-          'Level 1 sends basic mail via SMTP with no encryption. The server must be configured with SMTP_OUT_HOST/PORT (and optionally credentials).',
+          'Level 1 relays cleartext (or server-processed) payloads over SMTP. Configure SMTP_OUT_HOST / PORT (and auth if needed). Do not use Level 1 for classified content.',
+      },
+      {
+        keywords: ['dilithium', 'mldsa', 'signature'],
+        answer:
+          'NIST ML-DSA (formerly CRYSTALS-Dilithium) provides post-quantum signatures. This client’s envelopes use authenticated encryption (AES-GCM) after Kyber encapsulation; binding Dilithium-3 signatures to headers/bodies is on the roadmap for non-repudiation.',
       },
       {
         keywords: ['keys', 'public key', 'private key', 'bundle'],
         answer:
-          'Your app generates an RSA keypair and an ML-KEM keypair. Public keys are published to the server/KMS directory; private keys are stored locally encrypted with your password. If recipient keys change, the app warns you (TOFU) before sending.',
+          'Your device generates an RSA-OAEP-2048 keypair (legacy compatibility) plus ML-KEM-1024. Public keys are published to the user directory / KMS; private material lives in encryptedKeyBundleV1, unlocked with your login passphrase. TOFU warns on fingerprint changes.',
       },
       {
         keywords: ['otp', 'one-time pad', 'level 3'],
         answer:
-          'Level 3 (One-Time Pad) requires a shared pad/key distribution setup (e.g., QKD or pre-shared pads) and strict non-reuse accounting. It’s not enabled by default because it needs a separate key distribution and synchronization module.',
+          'A true one-time pad needs a physically or QKD-distributed pad, equal to message length, never reused, and destruction after use. Without that infrastructure, Level 3 stays disabled.',
       },
     ];
 
@@ -89,7 +94,7 @@ const chat = async (req, res) => {
     res.json({
       answer:
         match?.answer ||
-        'I can help with Levels 1/2/4, key setup, SMTP configuration, and troubleshooting. Ask about “Level 4”, “SMTP”, “keys”, or “QRNG”.',
+        'Ask about Kyber / ML-KEM-1024, Level 2 QRNG, SMTP Level 1, Dilithium / ML-DSA, or your local key bundle.',
       provider: 'faq',
     });
   } catch (error) {
@@ -99,4 +104,3 @@ const chat = async (req, res) => {
 };
 
 module.exports = { compose, chat };
-

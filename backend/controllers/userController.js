@@ -21,7 +21,7 @@ const updatePublicKey = async (req, res) => {
       updateData.ecdsaPublicKey = ecdsaPublicKey;
     }
     if (mlkemPublicKey) {
-      if (typeof mlkemPublicKey !== 'string' || mlkemPublicKey.length < 40) {
+      if (typeof mlkemPublicKey !== 'string' || mlkemPublicKey.length < 80) {
         return res.status(400).json({ message: 'Invalid ML-KEM public key format' });
       }
       updateData.mlkemPublicKey = mlkemPublicKey;

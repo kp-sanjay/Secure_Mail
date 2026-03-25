@@ -73,7 +73,7 @@ const SecurityDashboard = () => {
 
   const handleMarkAsSafe = async (emailId) => {
     try {
-      await emailAPI.updateEmailCategory(emailId, 'legit');
+      await emailAPI.updateEmailCategory(emailId, { category: 'legit' });
       loadDashboardData();
     } catch (error) {
       console.error('Error marking as safe:', error);
@@ -83,7 +83,7 @@ const SecurityDashboard = () => {
 
   const handleMarkAsPhishing = async (emailId) => {
     try {
-      await emailAPI.updateEmailCategory(emailId, 'phishing');
+      await emailAPI.updateEmailCategory(emailId, { category: 'phishing' });
       // Retrain model with user feedback
       const email = recentThreats.find((e) => e._id === emailId);
       if (email) {
@@ -123,7 +123,42 @@ const SecurityDashboard = () => {
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-100 mb-6">Security Dashboard</h1>
+        <h1 className="text-2xl font-bold text-slate-100 mb-4 tracking-tight uppercase text-lg">
+          Security dashboard
+        </h1>
+
+        <div className="portal-card p-6 mb-8 grid grid-cols-1 md:grid-cols-2 gap-8 border-cyan-500/20">
+          <div>
+            <h2 className="text-xs font-bold text-cyan-400 uppercase tracking-[0.2em] mb-3">
+              Key integrity & rotation
+            </h2>
+            <ul className="text-[11px] text-slate-300 space-y-2 leading-relaxed font-mono">
+              <li className="flex gap-2">
+                <span className="text-cyan-500">—</span>
+                CRYSTALS-Kyber ML-KEM-1024 KEM keys: review quarterly; rotate on compromise or 180d policy.
+              </li>
+              <li className="flex gap-2">
+                <span className="text-cyan-500">—</span>
+                RSA-OAEP-2048 retained for legacy ciphertext & assist workflows; phase-out tied to partner
+                upgrades.
+              </li>
+              <li className="flex gap-2">
+                <span className="text-cyan-500">—</span>
+                ML-DSA (DILITHIUM-3) end-to-end message signing: planned for non-repudiation on envelopes.
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h2 className="text-xs font-bold text-isro-orange uppercase tracking-[0.2em] mb-3">
+              CA & directory trust
+            </h2>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Transport TLS follows the OS / browser trust store. Mail encryption trust is anchored in per-device
+              key bundles and TOFU on published Kyber/RSA fingerprints in the user directory — not a public CA on
+              message keys. Planned: org-signed KMS manifest and integrity pins in the desktop client.
+            </p>
+          </div>
+        </div>
 
         {loading ? (
           <div className="text-center py-12">
@@ -172,10 +207,10 @@ const SecurityDashboard = () => {
                               <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRiskColor(threat.securityScore)}`}>
                                 Risk: {threat.securityScore}%
                               </span>
-                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                threat.category === 'phishing' ? 'bg-red-100 text-red-800' :
-                                threat.category === 'spam' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                threat.category === 'phishing' ? 'bg-red-950/60 text-red-300 border border-red-500/40' :
+                                threat.category === 'spam' ? 'bg-yellow-950/50 text-yellow-200 border border-yellow-600/40' :
+                                'bg-slate-800 text-slate-300 border border-slate-600'
                               }`}>
                                 {threat.category}
                               </span>

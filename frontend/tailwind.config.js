@@ -6,6 +6,18 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        mono: ['"Share Tech Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      keyframes: {
+        'mission-ticker': {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
+      },
+      animation: {
+        'mission-ticker': 'mission-ticker 45s linear infinite',
+      },
       colors: {
         primary: {
           50: '#eff6ff',
@@ -20,10 +32,11 @@ export default {
           900: '#1e3a8a',
         },
         isro: {
-          navy: '#0f172a',
+          navy: '#050a14',
+          'navy-mid': '#0a1628',
           'navy-light': '#1e293b',
-          orange: '#ea580c',
-          'orange-light': '#f97316',
+          orange: '#f39c12',
+          'orange-light': '#f5b041',
         },
         forest: {
           300: '#4ade80',

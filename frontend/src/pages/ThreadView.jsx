@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { emailAPI } from '../utils/api';
 import { decryptRSA, importAESKey, decryptAESWithNonce } from '../utils/crypto';
+import { decryptEnvelope } from '../utils/envelope';
 
 // Separate component for thread email items
 const ThreadEmailItem = ({ email, index, isLast, decryptEmail, formatDate }) => {
@@ -85,7 +86,7 @@ const ThreadView = () => {
   const [thread, setThread] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const { user, privateKey } = useAuth();
+  const { user, privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64 } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -109,7 +110,15 @@ const ThreadView = () => {
 
   const decryptEmail = async (email) => {
     try {
-      // Try ECDH first, fallback to RSA
+      if (email.envelope) {
+        return await decryptEnvelope({
+          envelope: email.envelope,
+          rsaPrivateKey: privateKey,
+          mlkemSecretKeyB64,
+          mlkem768SecretKeyB64,
+        });
+      }
+
       let aesKeyBase64 = null;
       
       if (email.encryptedECDHKey) {

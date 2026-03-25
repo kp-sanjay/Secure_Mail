@@ -145,12 +145,12 @@ export function HexagonBackground({
         }}
       />
 
-      {/* Forest-green cursor highlight (acts like hover) */}
+      {/* Cursor-follow highlight (uses ops cyan; forest variant via glowColor on parent) */}
       <div
         className="pointer-events-none absolute inset-0 opacity-70"
         style={{
           background:
-            'radial-gradient(180px 180px at var(--mx, 50%) var(--my, 50%), rgba(34, 197, 94, 0.22) 0%, transparent 60%)',
+            'radial-gradient(180px 180px at var(--mx, 50%) var(--my, 50%), rgba(34, 211, 238, 0.18) 0%, transparent 60%)',
         }}
       />
 

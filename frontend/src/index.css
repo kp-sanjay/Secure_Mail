@@ -1,12 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Share Tech Mono', ui-monospace, 'SFMono-Regular', Menlo, Monaco, monospace;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #030303;
@@ -18,6 +18,16 @@ body {
 
 /* Portal-style card */
 .portal-card {
-  @apply bg-neutral-950/70 border border-forest-500/30 rounded shadow-sm backdrop-blur text-gray-100;
+  @apply bg-[#050a14]/75 border border-cyan-500/25 rounded shadow-lg backdrop-blur-md text-slate-100;
+}
+
+@layer components {
+  .input-glass {
+    @apply w-full rounded-md border border-cyan-500/25 bg-slate-950/55 px-4 py-2 text-slate-100 placeholder:text-slate-500 shadow-inner backdrop-blur-sm
+      focus:border-isro-orange/70 focus:outline-none focus:ring-1 focus:ring-isro-orange/35;
+  }
+  .select-glass {
+    @apply input-glass appearance-none bg-[#0a1628]/90 cursor-pointer;
+  }
 }
 
