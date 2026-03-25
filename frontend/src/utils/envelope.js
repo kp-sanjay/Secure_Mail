@@ -1,5 +1,5 @@
 import { decryptAES, decryptRSA, encryptAES, importAESKey } from './crypto';
-import { mlkemDecapBase64, mlkemEncapBase64 } from './pqc';
+import { inferMlKemVariantFromPublicKeyB64, mlkemDecapBase64, mlkemEncapBase64 } from './pqc';
 
 function b64ToU8(b64) {
   const bin = atob(b64);
@@ -79,10 +79,8 @@ export async function encryptEnvelope({
     const seedHashB64 = await sha256B64(seedBytes);
     const saltB64 = u8ToB64(seedBytes);
 
-    const { ciphertextB64, sharedSecretB64 } = await mlkemEncapBase64(
-      receiverMlKemPublicKeyB64,
-      'ML-KEM-1024'
-    );
+    const kemVariant = inferMlKemVariantFromPublicKeyB64(receiverMlKemPublicKeyB64) || 'ML-KEM-1024';
+    const { ciphertextB64, sharedSecretB64 } = await mlkemEncapBase64(receiverMlKemPublicKeyB64, kemVariant);
 
     const info = 'QDK-L2-QuantumAided-Kyber-v2';
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
@@ -98,7 +96,7 @@ export async function encryptEnvelope({
       to: receiverEmail,
       alg: {
         content: 'AES-256-GCM',
-        kem: 'ML-KEM-1024',
+        kem: kemVariant,
         kdf: 'HKDF-SHA256',
         mode: 'quantum-aided-kyber',
       },
@@ -118,10 +116,8 @@ export async function encryptEnvelope({
   if (level === 4) {
     if (!receiverMlKemPublicKeyB64) throw new Error('Receiver ML-KEM public key missing (required for Level 4)');
 
-    const { ciphertextB64, sharedSecretB64 } = await mlkemEncapBase64(
-      receiverMlKemPublicKeyB64,
-      'ML-KEM-1024'
-    );
+    const kemVariant = inferMlKemVariantFromPublicKeyB64(receiverMlKemPublicKeyB64) || 'ML-KEM-1024';
+    const { ciphertextB64, sharedSecretB64 } = await mlkemEncapBase64(receiverMlKemPublicKeyB64, kemVariant);
 
     const saltB64 = newSaltB64(16);
     const info = 'QDK-L4-MLKEM1024-v1';
@@ -138,7 +134,7 @@ export async function encryptEnvelope({
       to: receiverEmail,
       alg: {
         content: 'AES-256-GCM',
-        kem: 'ML-KEM-1024',
+        kem: kemVariant,
         kdf: 'HKDF-SHA256',
         signingNote: 'ML-DSA (Dilithium) identity signatures planned; message auth via AES-GCM',
       },

@@ -363,11 +363,8 @@ const sendEmailEnhanced = async (req, res) => {
       });
     }
 
-    if (transport === 'smtp' && !process.env.SMTP_OUT_HOST) {
-      return res.status(400).json({
-        message: 'SMTP transport requested but SMTP_OUT_HOST is not configured on the server',
-      });
-    }
+    const smtpRequested = transport === 'smtp';
+    const smtpConfigured = Boolean(process.env.SMTP_OUT_HOST);
 
     // Find receiver
     const receiver = await User.findOne({ email: receiverEmail.toLowerCase() });
@@ -397,7 +394,8 @@ const sendEmailEnhanced = async (req, res) => {
       receiver: receiver._id,
       envelope: hasEnvelope ? envelope : null,
       securityLevel: typeof securityLevel === 'number' ? securityLevel : (hasEnvelope ? envelope.level : null),
-      transport: transport === 'smtp' ? 'smtp' : 'api',
+      // Graceful fallback: if SMTP is requested but not configured, keep flow working via API transport.
+      transport: smtpRequested && smtpConfigured ? 'smtp' : 'api',
       encryptedSubject: typeof encryptedSubject === 'string' ? encryptedSubject : '',
       encryptedBody: typeof encryptedBody === 'string' ? encryptedBody : '',
       encryptedAESKey: typeof encryptedAESKey === 'string' ? encryptedAESKey : '',
@@ -423,7 +421,10 @@ const sendEmailEnhanced = async (req, res) => {
     }
 
     res.status(201).json({
-      message: 'Email sent successfully',
+      message:
+        smtpRequested && !smtpConfigured
+          ? 'Email sent successfully (SMTP not configured; stored and delivered via API transport)'
+          : 'Email sent successfully',
       emailId: email._id,
       threadId: finalThreadId,
       timestamp: email.timestamp,

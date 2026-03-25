@@ -57,3 +57,19 @@ export function inferMlKemVariantFromSecretKeyB64(secretKeyB64) {
   }
   return null;
 }
+
+/** Detect variant from raw ML-KEM public key length. */
+export function inferMlKemVariantFromPublicKeyB64(publicKeyB64) {
+  if (!publicKeyB64 || typeof publicKeyB64 !== 'string') return null;
+  try {
+    const len = b64ToU8(publicKeyB64).length;
+    // mlkem package key sizes:
+    // - ML-KEM-768 public key: 1184 bytes
+    // - ML-KEM-1024 public key: 1568 bytes
+    if (len === 1184) return 'ML-KEM-768';
+    if (len === 1568) return 'ML-KEM-1024';
+  } catch {
+    /* ignore */
+  }
+  return null;
+}

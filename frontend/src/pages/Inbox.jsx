@@ -24,10 +24,14 @@ const Inbox = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && privateKey) {
-      fetchInbox();
+    if (!user) {
+      setLoading(false);
+      return;
     }
-  }, [user, privateKey]);
+    // Do not block inbox fetch on local key material.
+    // Messages can still list even if decryption keys are unavailable.
+    fetchInbox();
+  }, [user]);
 
   const filteredEmails = useMemo(() => {
     let list = emails;
@@ -103,6 +107,12 @@ const Inbox = () => {
   };
 
   const handleEmailClick = async (email) => {
+    const level = email?.envelope?.level ?? email?.securityLevel;
+    const hasAnyDecryptKey = Boolean(privateKey || mlkemSecretKeyB64 || mlkem768SecretKeyB64);
+    if (level && level !== 1 && !hasAnyDecryptKey) {
+      alert('Decryption keys are not loaded on this browser yet. Please re-login once and try again.');
+      return;
+    }
     try {
       const decrypted = await decryptEmail(email);
       navigate(`/email/${email._id}`, {
