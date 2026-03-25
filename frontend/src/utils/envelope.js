@@ -1,5 +1,10 @@
 import { decryptAES, decryptRSA, encryptAES, importAESKey } from './crypto';
-import { inferMlKemVariantFromPublicKeyB64, mlkemDecapBase64, mlkemEncapBase64 } from './pqc';
+import {
+  inferMlKemVariantFromPublicKeyB64,
+  inferMlKemVariantFromSecretKeyB64,
+  mlkemDecapBase64,
+  mlkemEncapBase64,
+} from './pqc';
 
 function b64ToU8(b64) {
   const bin = atob(b64);
@@ -59,23 +64,25 @@ function pickCipherFields(node) {
 async function tryDecapWithFallback(ctB64, preferredKem, mlkemSecretKeyB64, mlkem768SecretKeyB64) {
   const attempts = [];
 
-  const preferredSk =
-    preferredKem === 'ML-KEM-768'
-      ? mlkem768SecretKeyB64 || mlkemSecretKeyB64
-      : mlkemSecretKeyB64;
-  if (preferredSk) attempts.push({ kem: preferredKem, sk: preferredSk });
+  const skVariant = (skB64) => inferMlKemVariantFromSecretKeyB64(skB64);
 
-  const altKem = preferredKem === 'ML-KEM-768' ? 'ML-KEM-1024' : 'ML-KEM-768';
-  const altSk =
-    altKem === 'ML-KEM-768'
-      ? mlkem768SecretKeyB64 || mlkemSecretKeyB64
-      : mlkemSecretKeyB64;
-  if (altSk && !(altSk === preferredSk && altKem === preferredKem)) {
-    attempts.push({ kem: altKem, sk: altSk });
+  const addIfAvailable = (kem, sk) => {
+    if (!sk) return;
+    const v = skVariant(sk);
+    if (v !== kem) return; // Never attempt decap with the wrong secret-key parameter set.
+    attempts.push({ kem, sk });
+  };
+
+  if (preferredKem === 'ML-KEM-768') {
+    addIfAvailable('ML-KEM-768', mlkem768SecretKeyB64);
+    addIfAvailable('ML-KEM-1024', mlkemSecretKeyB64);
+  } else {
+    addIfAvailable('ML-KEM-1024', mlkemSecretKeyB64);
+    addIfAvailable('ML-KEM-768', mlkem768SecretKeyB64);
   }
 
   if (attempts.length === 0) {
-    throw new Error('ML-KEM secret key not loaded');
+    throw new Error(`No matching ML-KEM secret key loaded for ${preferredKem}`);
   }
 
   let lastErr = null;
