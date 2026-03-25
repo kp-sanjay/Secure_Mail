@@ -262,7 +262,11 @@ export async function decryptAES(key, encryptedData, iv) {
     return decoder.decode(decrypted);
   } catch (error) {
     console.error('Error decrypting with AES:', error);
-    throw new Error('Failed to decrypt data');
+    // WebCrypto throws a generic error on AES-GCM auth/tag mismatch (usually wrong key/iv).
+    // Surface a clearer message for the UI/debugging.
+    const hint =
+      (error && (error.name || error.message)) ? ` (${error.name || error.message})` : '';
+    throw new Error(`Failed to decrypt data (AES-GCM auth tag mismatch)${hint}`);
   }
 }
 

@@ -14,6 +14,7 @@ const ViewEmail = () => {
   const [decrypted, setDecrypted] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const preDecrypted = location.state?.decrypted;
 
   useEffect(() => {
     if (!user) {
@@ -22,14 +23,14 @@ const ViewEmail = () => {
     }
 
     // If decrypted data is passed from navigation, use it
-    if (location.state?.decrypted) {
+    if (preDecrypted) {
       setEmail(location.state.email);
-      setDecrypted(location.state.decrypted);
+      setDecrypted(preDecrypted);
       setLoading(false);
     } else {
       fetchEmail();
     }
-  }, [id, user, navigate, location.state]);
+  }, [id, user, navigate, preDecrypted]);
 
   const fetchEmail = async () => {
     try {
@@ -38,11 +39,6 @@ const ViewEmail = () => {
       const emailData = response.data;
 
       setEmail(emailData);
-
-      // Decrypt if user is receiver (has private key)
-      if (privateKey && emailData?.receiver?._id === user._id) {
-        await decryptEmailData(emailData);
-      }
     } catch (err) {
       setError('Failed to load email');
       console.error('Error fetching email:', err);
@@ -53,6 +49,7 @@ const ViewEmail = () => {
 
   const decryptEmailData = async (emailData) => {
     try {
+      setError('');
       if (emailData.envelope) {
         const dec = await decryptEnvelope({
           envelope: emailData.envelope,
@@ -78,9 +75,22 @@ const ViewEmail = () => {
       setDecrypted({ subject, body });
     } catch (err) {
       console.error('Error decrypting email:', err);
-      setError('Failed to decrypt email. It may be corrupted.');
+      setError(err?.message || 'Failed to decrypt email. It may be corrupted.');
     }
   };
+
+  // Auto-decrypt when keys finish loading/unlocking after initial fetch.
+  useEffect(() => {
+    if (!email || !user) return;
+    if (preDecrypted) return; // keep decrypted payload from navigation
+    const receiverMatch = email?.receiver?._id && email.receiver._id === user._id;
+    if (!receiverMatch) return;
+
+    // Attempt decrypt once; if it fails due to missing keys, it'll be retried when keys change.
+    // eslint-disable-next-line no-void
+    void decryptEmailData(email);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, user, privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64, preDecrypted]);
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);

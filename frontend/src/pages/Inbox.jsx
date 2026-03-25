@@ -122,61 +122,30 @@ const Inbox = () => {
   };
 
   const handleEmailClick = async (email) => {
-    const level = email?.envelope?.level ?? email?.securityLevel;
-    const hasAnyDecryptKey = Boolean(
-      keyAvailabilityRef.current.privateKey ||
-        keyAvailabilityRef.current.mlkemSecretKeyB64 ||
-        keyAvailabilityRef.current.mlkem768SecretKeyB64
-    );
-
-    if (level && level !== 1 && !hasAnyDecryptKey) {
-      // Keys may still be initializing after login (or after navigating without unlocking in this browser).
-      // Wait briefly instead of failing immediately.
-      const timeoutMs = 9000;
-      const started = Date.now();
-      while (Date.now() - started < timeoutMs) {
-        // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => setTimeout(r, 250));
-        const stillMissing = !Boolean(
-          keyAvailabilityRef.current.privateKey ||
-            keyAvailabilityRef.current.mlkemSecretKeyB64 ||
-            keyAvailabilityRef.current.mlkem768SecretKeyB64
-        );
-        if (!stillMissing) break;
-      }
-
-      const nowHasKeys = Boolean(
+    // Important UX: always navigate immediately so clicks feel responsive.
+    // ViewEmail will decrypt as soon as keys are available in this browser session.
+    try {
+      const level = email?.envelope?.level ?? email?.securityLevel;
+      const hasAnyDecryptKey = Boolean(
         keyAvailabilityRef.current.privateKey ||
           keyAvailabilityRef.current.mlkemSecretKeyB64 ||
           keyAvailabilityRef.current.mlkem768SecretKeyB64
       );
-      if (!nowHasKeys) {
-        alert('Decryption keys are not loaded on this browser yet. Please re-login once and try again.');
+
+      // Best-effort: if keys are already present (especially for Level 1), decrypt now.
+      if (level === 1 || hasAnyDecryptKey) {
+        const decrypted = await decryptEmail(email);
+        navigate(`/email/${email._id}`, {
+          state: { email, decrypted },
+        });
         return;
       }
+    } catch (e) {
+      // If best-effort decrypt fails, still navigate to show the encrypted payload UI.
+      console.warn('Best-effort decrypt failed; navigating anyway:', e);
     }
-    try {
-      const decrypted = await decryptEmail(email);
-      navigate(`/email/${email._id}`, {
-        state: { email, decrypted },
-      });
-    } catch (err) {
-      const msg = String(err?.message || '').toLowerCase();
-      // Show the raw underlying error for faster debugging.
-      const detailed =
-        msg && msg.length < 160 ? String(err?.message) : 'Decryption failed';
-      if (
-        msg.includes('not loaded') ||
-        msg.includes('encapsulation') ||
-        msg.includes('decaps') ||
-        msg.includes('kyber') ||
-        msg.includes('ml-kem')
-      ) {
-        alert('Unable to decrypt with current key bundle on this browser. Please re-login once and try again.');
-      } else {
-        alert(`Decryption failed: ${detailed}`);
-      }
-    }
+
+    navigate(`/email/${email._id}`, { state: { email } });
   };
 
   const formatDate = (dateString) => {
