@@ -115,6 +115,8 @@ const Inbox = () => {
       return { subject, body };
     } catch (err) {
       console.error('Error decrypting email:', err);
+      // Preserve the underlying decryption error message so the UI can classify it correctly.
+      if (err instanceof Error) throw err;
       throw new Error('Failed to decrypt email');
     }
   };
@@ -160,6 +162,9 @@ const Inbox = () => {
       });
     } catch (err) {
       const msg = String(err?.message || '').toLowerCase();
+      // Show the raw underlying error for faster debugging.
+      const detailed =
+        msg && msg.length < 160 ? String(err?.message) : 'Decryption failed';
       if (
         msg.includes('not loaded') ||
         msg.includes('encapsulation') ||
@@ -169,7 +174,7 @@ const Inbox = () => {
       ) {
         alert('Unable to decrypt with current key bundle on this browser. Please re-login once and try again.');
       } else {
-        alert('Failed to decrypt email. Envelope format may be incompatible or corrupted.');
+        alert(`Decryption failed: ${detailed}`);
       }
     }
   };
