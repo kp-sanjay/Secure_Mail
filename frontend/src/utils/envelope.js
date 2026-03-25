@@ -47,6 +47,49 @@ function resolveKemName(envelope) {
   return 'ML-KEM-1024';
 }
 
+function pickCipherFields(node) {
+  if (!node || typeof node !== 'object') return null;
+  // Support both current and legacy field names.
+  const ctB64 = node.ctB64 || node.ciphertextB64 || node.encrypted || null;
+  const ivB64 = node.ivB64 || node.iv || node.nonceB64 || null;
+  if (!ctB64 || !ivB64) return null;
+  return { ctB64, ivB64 };
+}
+
+async function tryDecapWithFallback(ctB64, preferredKem, mlkemSecretKeyB64, mlkem768SecretKeyB64) {
+  const attempts = [];
+
+  const preferredSk =
+    preferredKem === 'ML-KEM-768'
+      ? mlkem768SecretKeyB64 || mlkemSecretKeyB64
+      : mlkemSecretKeyB64;
+  if (preferredSk) attempts.push({ kem: preferredKem, sk: preferredSk });
+
+  const altKem = preferredKem === 'ML-KEM-768' ? 'ML-KEM-1024' : 'ML-KEM-768';
+  const altSk =
+    altKem === 'ML-KEM-768'
+      ? mlkem768SecretKeyB64 || mlkemSecretKeyB64
+      : mlkemSecretKeyB64;
+  if (altSk && !(altSk === preferredSk && altKem === preferredKem)) {
+    attempts.push({ kem: altKem, sk: altSk });
+  }
+
+  if (attempts.length === 0) {
+    throw new Error('ML-KEM secret key not loaded');
+  }
+
+  let lastErr = null;
+  for (const a of attempts) {
+    try {
+      return await mlkemDecapBase64(ctB64, a.sk, a.kem);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error('Failed to decapsulate ML-KEM ciphertext');
+}
+
 export async function encryptEnvelope({
   level,
   senderEmail,
@@ -172,9 +215,9 @@ export async function decryptEnvelope({
       if (!rsaPrivateKey) throw new Error('RSA private key not loaded');
       const aesKeyB64 = await decryptRSA(rsaPrivateKey, rsaWrapped);
       const aesKey = await importAESKey(aesKeyB64);
-      const subj = envelope.content?.subject;
-      const bod = envelope.content?.body;
-      if (!subj?.ctB64 || !subj?.ivB64 || !bod?.ctB64 || !bod?.ivB64) throw new Error('Missing ciphertext fields');
+      const subj = pickCipherFields(envelope.content?.subject);
+      const bod = pickCipherFields(envelope.content?.body);
+      if (!subj || !bod) throw new Error('Missing ciphertext fields');
       const subject = await decryptAES(aesKey, subj.ctB64, subj.ivB64);
       const body = await decryptAES(aesKey, bod.ctB64, bod.ivB64);
       return { subject, body };
@@ -183,21 +226,20 @@ export async function decryptEnvelope({
     const ctB64 = envelope.key?.mlkem?.ctB64;
     if (!ctB64) throw new Error('Missing Kyber ciphertext in Level 2 envelope');
     const kem = resolveKemName(envelope);
-    const sk =
-      kem === 'ML-KEM-768'
-        ? mlkem768SecretKeyB64 || mlkemSecretKeyB64
-        : mlkemSecretKeyB64;
-    if (!sk) throw new Error('ML-KEM secret key not loaded');
-
-    const { sharedSecretB64 } = await mlkemDecapBase64(ctB64, sk, kem);
+    const { sharedSecretB64 } = await tryDecapWithFallback(
+      ctB64,
+      kem,
+      mlkemSecretKeyB64,
+      mlkem768SecretKeyB64
+    );
     const saltB64 = envelope.kdf?.saltB64;
     const info = envelope.kdf?.info || 'QDK-L2-QuantumAided-Kyber-v2';
     if (!saltB64) throw new Error('Missing KDF salt in envelope');
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
-    const subj = envelope.content?.subject;
-    const bod = envelope.content?.body;
-    if (!subj?.ctB64 || !subj?.ivB64 || !bod?.ctB64 || !bod?.ivB64) throw new Error('Missing ciphertext fields');
+    const subj = pickCipherFields(envelope.content?.subject);
+    const bod = pickCipherFields(envelope.content?.body);
+    if (!subj || !bod) throw new Error('Missing ciphertext fields');
     const subject = await decryptAES(aesKey, subj.ctB64, subj.ivB64);
     const body = await decryptAES(aesKey, bod.ctB64, bod.ivB64);
     return { subject, body };
@@ -207,22 +249,21 @@ export async function decryptEnvelope({
     const ctB64 = envelope.key?.mlkem?.ctB64;
     if (!ctB64) throw new Error('Missing ML-KEM ciphertext in envelope');
     const kem = resolveKemName(envelope);
-    const sk =
-      kem === 'ML-KEM-768'
-        ? mlkem768SecretKeyB64 || mlkemSecretKeyB64
-        : mlkemSecretKeyB64;
-    if (!sk) throw new Error('ML-KEM secret key not loaded');
-
-    const { sharedSecretB64 } = await mlkemDecapBase64(ctB64, sk, kem);
+    const { sharedSecretB64 } = await tryDecapWithFallback(
+      ctB64,
+      kem,
+      mlkemSecretKeyB64,
+      mlkem768SecretKeyB64
+    );
     const saltB64 = envelope.kdf?.saltB64;
     const info = envelope.kdf?.info || 'QDK-L4-MLKEM1024-v1';
     if (!saltB64) throw new Error('Missing KDF salt in envelope');
 
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
-    const subj = envelope.content?.subject;
-    const bod = envelope.content?.body;
-    if (!subj?.ctB64 || !subj?.ivB64 || !bod?.ctB64 || !bod?.ivB64) throw new Error('Missing ciphertext fields');
+    const subj = pickCipherFields(envelope.content?.subject);
+    const bod = pickCipherFields(envelope.content?.body);
+    if (!subj || !bod) throw new Error('Missing ciphertext fields');
 
     const subject = await decryptAES(aesKey, subj.ctB64, subj.ivB64);
     const body = await decryptAES(aesKey, bod.ctB64, bod.ivB64);

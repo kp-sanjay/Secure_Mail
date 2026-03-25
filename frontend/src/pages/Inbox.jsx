@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { emailAPI } from '../utils/api';
@@ -22,6 +22,19 @@ const Inbox = () => {
   const [viewMode, setViewMode] = useState('list');
   const { user, privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64 } = useAuth();
   const navigate = useNavigate();
+  const keyAvailabilityRef = useRef({
+    privateKey: null,
+    mlkemSecretKeyB64: null,
+    mlkem768SecretKeyB64: null,
+  });
+
+  useEffect(() => {
+    keyAvailabilityRef.current = {
+      privateKey,
+      mlkemSecretKeyB64,
+      mlkem768SecretKeyB64,
+    };
+  }, [privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64]);
 
   useEffect(() => {
     if (!user) {
@@ -108,10 +121,37 @@ const Inbox = () => {
 
   const handleEmailClick = async (email) => {
     const level = email?.envelope?.level ?? email?.securityLevel;
-    const hasAnyDecryptKey = Boolean(privateKey || mlkemSecretKeyB64 || mlkem768SecretKeyB64);
+    const hasAnyDecryptKey = Boolean(
+      keyAvailabilityRef.current.privateKey ||
+        keyAvailabilityRef.current.mlkemSecretKeyB64 ||
+        keyAvailabilityRef.current.mlkem768SecretKeyB64
+    );
+
     if (level && level !== 1 && !hasAnyDecryptKey) {
-      alert('Decryption keys are not loaded on this browser yet. Please re-login once and try again.');
-      return;
+      // Keys may still be initializing after login (or after navigating without unlocking in this browser).
+      // Wait briefly instead of failing immediately.
+      const timeoutMs = 9000;
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 250));
+        const stillMissing = !Boolean(
+          keyAvailabilityRef.current.privateKey ||
+            keyAvailabilityRef.current.mlkemSecretKeyB64 ||
+            keyAvailabilityRef.current.mlkem768SecretKeyB64
+        );
+        if (!stillMissing) break;
+      }
+
+      const nowHasKeys = Boolean(
+        keyAvailabilityRef.current.privateKey ||
+          keyAvailabilityRef.current.mlkemSecretKeyB64 ||
+          keyAvailabilityRef.current.mlkem768SecretKeyB64
+      );
+      if (!nowHasKeys) {
+        alert('Decryption keys are not loaded on this browser yet. Please re-login once and try again.');
+        return;
+      }
     }
     try {
       const decrypted = await decryptEmail(email);
@@ -119,7 +159,18 @@ const Inbox = () => {
         state: { email, decrypted },
       });
     } catch (err) {
-      alert('Failed to decrypt email. It may be corrupted.');
+      const msg = String(err?.message || '').toLowerCase();
+      if (
+        msg.includes('not loaded') ||
+        msg.includes('encapsulation') ||
+        msg.includes('decaps') ||
+        msg.includes('kyber') ||
+        msg.includes('ml-kem')
+      ) {
+        alert('Unable to decrypt with current key bundle on this browser. Please re-login once and try again.');
+      } else {
+        alert('Failed to decrypt email. Envelope format may be incompatible or corrupted.');
+      }
     }
   };
 
