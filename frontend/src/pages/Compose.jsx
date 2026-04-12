@@ -18,6 +18,7 @@ const Compose = () => {
     body: '',
     classification: 'UNCLASSIFIED',
     missionTag: '',
+    password: '',
   });
   const [loading, setLoading] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -165,6 +166,7 @@ const Compose = () => {
         subject: formData.subject,
         body: formData.body,
         quantumSeedB64,
+        password: securityLevel === 3 ? formData.password : undefined,
       });
 
       // Step 4: Create search index
@@ -229,6 +231,13 @@ const Compose = () => {
       desc: 'ML-KEM-1024 encaps + AES-GCM (PQ channel)',
       color: 'bg-slate-900/80 border-isro-orange/40 text-slate-200',
       activeColor: 'ring-2 ring-isro-orange',
+    },
+    {
+      level: 3,
+      label: 'Level 3',
+      desc: 'Pre-shared Password · PBKDF2/AES',
+      color: 'bg-slate-900/80 border-emerald-500/30 text-slate-200',
+      activeColor: 'ring-2 ring-emerald-500',
     },
   ];
 
@@ -312,10 +321,27 @@ const Compose = () => {
                 ))}
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                Level 3 (OTP) requires QKD / pad logistics — not enabled. Transport signing upgrade: ML-DSA
-                (DILITHIUM-3) on roadmap.
+                Level 3 (Password) securely wraps the payload using a pre-shared password that only you and the recipient know.
               </p>
             </div>
+
+            {securityLevel === 3 && (
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-2">
+                  Encryption Password
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  className="input-glass"
+                  placeholder="Enter pre-shared password"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

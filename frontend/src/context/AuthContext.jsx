@@ -282,6 +282,7 @@ export const AuthProvider = ({ children }) => {
     register,
     login,
     logout,
+    unlockKeys: loadOrGenerateKeys,
     isAuthenticated: !!user,
   };
 

@@ -78,12 +78,17 @@ function pickCipherFields(node) {
 
 async function tryDecapWithFallback(ctB64, preferredKem, mlkemSecretKeyB64, mlkem768SecretKeyB64) {
   const attempts = [];
+  console.log(`[DECAP] Preferred KEM requested: ${preferredKem}`);
 
   const skVariant = (skB64) => inferMlKemVariantFromSecretKeyB64(skB64);
 
   const addIfAvailable = (kem, sk) => {
-    if (!sk) return;
+    if (!sk) {
+      console.log(`[DECAP] Secret key for ${kem} not provided.`);
+      return;
+    }
     const v = skVariant(sk);
+    console.log(`[DECAP] Supplied key for ${kem} actual variant inferred: ${v}`);
     if (v !== kem) return; // Never attempt decap with the wrong secret-key parameter set.
     attempts.push({ kem, sk });
   };
@@ -103,8 +108,10 @@ async function tryDecapWithFallback(ctB64, preferredKem, mlkemSecretKeyB64, mlke
   let lastErr = null;
   for (const a of attempts) {
     try {
+      console.log(`[DECAP] Trying decap with ${a.kem}`);
       return await mlkemDecapBase64(ctB64, a.sk, a.kem);
     } catch (e) {
+      console.log(`[DECAP] Decap failed for ${a.kem}:`, e);
       lastErr = e;
     }
   }
@@ -121,6 +128,7 @@ export async function encryptEnvelope({
   subject,
   body,
   quantumSeedB64,
+  password,
 }) {
   const createdAt = new Date().toISOString();
 
@@ -151,6 +159,17 @@ export async function encryptEnvelope({
       kemVariant === 'ML-KEM-768' ? 'QDK-L2-QuantumAided-Kyber768-v2' : 'QDK-L2-QuantumAided-Kyber-v2';
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
+    // DEBUG LOGS (Level 2 Encrypt)
+    const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+    const debugAESKeyHash = await sha256B64(rawAesKey);
+    console.log('--- ENCRYPT L2 DEBUG ---');
+    console.log(`Variant: ${kemVariant}`);
+    console.log(`HKDF Salt: ${saltB64}`);
+    console.log(`HKDF Info: ${info}`);
+    console.log(`Shared Secret (trim): ${sharedSecretB64.substring(0, 20)}`);
+    console.log(`AES Key Hash: ${debugAESKeyHash}`);
+    console.log('------------------------');
+
     const encSubject = await encryptAES(aesKey, subject);
     const encBody = await encryptAES(aesKey, body);
 
@@ -167,6 +186,7 @@ export async function encryptEnvelope({
         mode: 'quantum-aided-kyber',
       },
       kdf: { saltB64, info },
+      debugAESKeyHash, // TEMP DEBUG
       quantum: {
         seedSource: quantumSeedB64 ? 'qrng-endpoint' : 'local-csprng',
         seedHashB64,
@@ -189,6 +209,17 @@ export async function encryptEnvelope({
     const info = kemVariant === 'ML-KEM-768' ? 'QDK-L4-MLKEM768-v1' : 'QDK-L4-MLKEM1024-v1';
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
+    // DEBUG LOGS (Level 4 Encrypt)
+    const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+    const debugAESKeyHash = await sha256B64(rawAesKey);
+    console.log('--- ENCRYPT L4 DEBUG ---');
+    console.log(`Variant: ${kemVariant}`);
+    console.log(`HKDF Salt: ${saltB64}`);
+    console.log(`HKDF Info: ${info}`);
+    console.log(`Shared Secret (trim): ${sharedSecretB64.substring(0, 20)}`);
+    console.log(`AES Key Hash: ${debugAESKeyHash}`);
+    console.log('------------------------');
+
     const encSubject = await encryptAES(aesKey, subject);
     const encBody = await encryptAES(aesKey, body);
 
@@ -205,6 +236,7 @@ export async function encryptEnvelope({
         signingNote: 'ML-DSA (Dilithium) identity signatures planned; message auth via AES-GCM',
       },
       kdf: { saltB64, info },
+      debugAESKeyHash, // TEMP DEBUG
       key: { mlkem: { ctB64: ciphertextB64 } },
       content: {
         subject: { ctB64: encSubject.encrypted, ivB64: encSubject.iv },
@@ -214,7 +246,40 @@ export async function encryptEnvelope({
   }
 
   if (level === 3) {
-    throw new Error('Level 3 (One-Time Pad) requires a shared pad/key distribution setup and is not enabled yet.');
+    if (!password) {
+      throw new Error('Password required for Level 3');
+    }
+    const saltB64 = newSaltB64(16);
+
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+    const aesKey = await crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: b64ToU8(saltB64), iterations: 100000, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+
+    const encSubject = await encryptAES(aesKey, subject);
+    const encBody = await encryptAES(aesKey, body);
+
+    return {
+      v: 1,
+      level: 3,
+      createdAt,
+      from: senderEmail,
+      to: receiverEmail,
+      alg: {
+        content: 'AES-256-GCM',
+        logistics: 'PASSWORD-PBKDF2-SHA256',
+      },
+      kdf: { saltB64, iterations: 100000 },
+      content: {
+        subject: { ctB64: encSubject.encrypted, ivB64: encSubject.iv },
+        body: { ctB64: encBody.encrypted, ivB64: encBody.iv },
+      },
+    };
   }
 
   throw new Error(`Unsupported security level: ${level}`);
@@ -225,6 +290,7 @@ export async function decryptEnvelope({
   rsaPrivateKey,
   mlkemSecretKeyB64,
   mlkem768SecretKeyB64,
+  password,
 }) {
   if (!envelope || typeof envelope !== 'object') throw new Error('Missing envelope');
 
@@ -260,6 +326,19 @@ export async function decryptEnvelope({
     if (!saltB64) throw new Error('Missing KDF salt in envelope');
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
+    // DEBUG LOGS (Level 2 Decrypt)
+    const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+    const debugAESKeyHash = await sha256B64(rawAesKey);
+    console.log('--- DECRYPT L2 DEBUG ---');
+    console.log(`Resolved KEM: ${kem}`);
+    console.log(`HKDF Salt: ${saltB64}`);
+    console.log(`HKDF Info: ${info}`);
+    console.log(`Shared Secret (trim): ${sharedSecretB64.substring(0, 20)}`);
+    console.log(`AES Key Hash: ${debugAESKeyHash}`);
+    console.log(`Expected Hash: ${envelope.debugAESKeyHash || '(none provided)'}`);
+    console.log(`MATCH? ${envelope.debugAESKeyHash === debugAESKeyHash}`);
+    console.log('------------------------');
+
     const subj = pickCipherFields(envelope.content?.subject);
     const bod = pickCipherFields(envelope.content?.body);
     if (!subj || !bod) throw new Error('Missing ciphertext fields');
@@ -284,6 +363,19 @@ export async function decryptEnvelope({
 
     const aesKey = await hkdfAesGcmKeyFromSecretB64(sharedSecretB64, { saltB64, info });
 
+    // DEBUG LOGS (Level 4 Decrypt)
+    const rawAesKey = await crypto.subtle.exportKey('raw', aesKey);
+    const debugAESKeyHash = await sha256B64(rawAesKey);
+    console.log('--- DECRYPT L4 DEBUG ---');
+    console.log(`Resolved KEM: ${kem}`);
+    console.log(`HKDF Salt: ${saltB64}`);
+    console.log(`HKDF Info: ${info}`);
+    console.log(`Shared Secret (trim): ${sharedSecretB64.substring(0, 20)}`);
+    console.log(`AES Key Hash: ${debugAESKeyHash}`);
+    console.log(`Expected Hash: ${envelope.debugAESKeyHash || '(none provided)'}`);
+    console.log(`MATCH? ${envelope.debugAESKeyHash === debugAESKeyHash}`);
+    console.log('------------------------');
+
     const subj = pickCipherFields(envelope.content?.subject);
     const bod = pickCipherFields(envelope.content?.body);
     if (!subj || !bod) throw new Error('Missing ciphertext fields');
@@ -291,6 +383,43 @@ export async function decryptEnvelope({
     const subject = await decryptAES(aesKey, subj.ctB64, subj.ivB64);
     const body = await decryptAES(aesKey, bod.ctB64, bod.ivB64);
     return { subject, body };
+  }
+
+  if (envelope.level === 3) {
+    if (!password) {
+      throw new Error('Password Required');
+    }
+
+    const saltB64 = envelope.kdf?.saltB64;
+    const iters = envelope.kdf?.iterations || 100000;
+    if (!saltB64) throw new Error('Missing KDF salt in Level 3 envelope');
+
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+    let aesKey;
+    try {
+      aesKey = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: b64ToU8(saltB64), iterations: iters, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+      );
+    } catch (e) {
+      throw new Error('Invalid OTP Code');
+    }
+
+    const subj = pickCipherFields(envelope.content?.subject);
+    const bod = pickCipherFields(envelope.content?.body);
+    if (!subj || !bod) throw new Error('Missing ciphertext fields');
+
+    try {
+      const subject = await decryptAES(aesKey, subj.ctB64, subj.ivB64);
+      const body = await decryptAES(aesKey, bod.ctB64, bod.ivB64);
+      return { subject, body };
+    } catch (e) {
+      throw new Error('Failed to decrypt email. Incorrect password or corrupted message.');
+    }
   }
 
   throw new Error(`Unsupported envelope level for decryption: ${envelope.level}`);

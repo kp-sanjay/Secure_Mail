@@ -100,8 +100,24 @@ const getPublicKeyByEmail = async (req, res) => {
   }
 };
 
+// @desc    Get all users for contacts list
+// @route   GET /api/users/contacts
+// @access  Private
+const getContacts = async (req, res) => {
+  try {
+    const users = await User.find({ _id: { $ne: req.user._id } })
+      .select('name email department jobRole')
+      .sort({ name: 1 });
+    res.json(users);
+  } catch (error) {
+    console.error('Get contacts error:', error);
+    res.status(500).json({ message: 'Server error fetching contacts' });
+  }
+};
+
 module.exports = {
   updatePublicKey,
   getPublicKeyByEmail,
+  getContacts,
 };
 

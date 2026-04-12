@@ -49,6 +49,7 @@ export const authAPI = {
 export const userAPI = {
   updatePublicKey: (payload) => api.put('/users/public-key', payload),
   getPublicKeyByEmail: (email) => api.get(`/users/public-key/${email}`),
+  getContacts: () => api.get('/users/contacts'),
 };
 
 // Email API

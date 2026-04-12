@@ -1,6 +1,6 @@
 const Email = require('../models/Email');
 const User = require('../models/User');
-const { sendSmtpMail } = require('../services/smtpSender');
+const { sendSmtpMail, sendOtpMail } = require('../services/smtpSender');
 
 const CLASSIFICATIONS = ['UNCLASSIFIED', 'RESTRICTED', 'SECRET', 'TOP_SECRET'];
 
@@ -343,6 +343,7 @@ const sendEmailEnhanced = async (req, res) => {
       classification,
       missionTag,
       isFlagged,
+      otpCode,
     } = req.body;
 
     // Validation
@@ -418,6 +419,12 @@ const sendEmailEnhanced = async (req, res) => {
       const { messageId } = await sendSmtpMail({ from, to, envelope: email.envelope || null });
       email.smtpMessageId = messageId;
       await email.save();
+    }
+
+    // OTP Code Dispatch for Legacy Level 3 (deprecated in favor of pre-shared password)
+    if (otpCode) {
+      const from = process.env.SMTP_FROM || req.user.email;
+      await sendOtpMail({ from, to: receiver.email, otp: otpCode });
     }
 
     res.status(201).json({

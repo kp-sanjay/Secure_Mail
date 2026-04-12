@@ -1,5 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
+import { CallProvider } from './context/CallContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -37,131 +39,135 @@ const PrivateRoute = ({ children }) => {
 function App() {
   return (
     <AuthProvider>
-      <div className="relative min-h-screen">
-        <HexagonBackground
-          glowColor="rgba(34, 211, 238, 0.55)"
-          borderColor="rgba(15, 23, 42, 0.85)"
-        />
-        <div className="relative">
-          <Router>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-          <Route
-            path="/inbox"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Inbox />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/sent"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Sent />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/compose"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Compose />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/email/:id"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <ViewEmail />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/drafts"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Drafts />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <SecurityDashboard />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/thread/:threadId"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <ThreadView />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/assistant"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Assistant />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/calendar"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Calendar />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/messages"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Messages />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/call"
-            element={
-              <PrivateRoute>
-                <Layout>
-                  <Call />
-                </Layout>
-              </PrivateRoute>
-            }
-          />
-          <Route path="/" element={<Navigate to="/inbox" />} />
-            </Routes>
-          </Router>
-        </div>
-      </div>
+      <SocketProvider>
+        <CallProvider>
+          <div className="relative min-h-screen">
+            <HexagonBackground
+              glowColor="rgba(34, 211, 238, 0.55)"
+              borderColor="rgba(15, 23, 42, 0.85)"
+            />
+            <div className="relative">
+              <Router>
+                <Routes>
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route
+                    path="/inbox"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Inbox />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/sent"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Sent />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/compose"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Compose />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/email/:id"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <ViewEmail />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/drafts"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Drafts />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <SecurityDashboard />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/thread/:threadId"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <ThreadView />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/assistant"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Assistant />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/calendar"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Calendar />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/messages"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Messages />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/call"
+                    element={
+                      <PrivateRoute>
+                        <Layout>
+                          <Call />
+                        </Layout>
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route path="/" element={<Navigate to="/inbox" />} />
+                </Routes>
+              </Router>
+            </div>
+          </div>
+        </CallProvider>
+      </SocketProvider>
     </AuthProvider>
   );
 }

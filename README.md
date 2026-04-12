@@ -8,7 +8,7 @@ A complete End-to-End Encrypted email application with ISRO-style multi-level se
   - **Level 1**: Basic SMTP (clear transport; no payload crypto)
   - **Level 2**: QRNG-seeded HKDF + **CRYSTALS-Kyber (ML-KEM-1024)** key establishment + AES-256-GCM
   - **Level 4**: **ML-KEM-1024** + AES-256-GCM
-  - **Level 3**: One-Time Pad remains **disabled** (requires separate pad/QKD logistics)
+  - **Level 3**: **Pre-shared Password** wrapper using PBKDF2 + AES-256-GCM (formerly OTP)
 - 🔑 **Post-Quantum Cryptography on the client**: ML-KEM (Kyber) key establishment + TOFU trust pinning
 - 🧾 **Classification & Mission Tags**: Emails carry `classification`, `missionTag`, and `isFlagged` metadata for ISRO-style routing
 - 📬 **Inbox / Sent / Threads / View**: Envelope-based decrypt for Level 1/2/4 (server stores ciphertext)
@@ -309,7 +309,7 @@ After deployment, update:
 ## Future Enhancements
 - **Attachments Encryption**: Encrypt file attachments before sending (E2EE)
 - **Self-Destruct / Expiry**: Auto-delete or enforce time-bounded viewing for classified content
-- **OTP / One-Time Pad (Level 3)**: Requires real pad/key logistics (e.g., QKD + synchronized pad distribution)
+- **True One-Time Pad (Advanced pad logistics)**: Requires actual offline pad/key sync (e.g., QKD + synchronized pad distribution), progressing beyond standard password cryptography
 - **Post-Quantum Signatures (Dilithium / ML-DSA)**: Signed envelopes for non-repudiation and integrity binding
 - **Encrypted Search / Privacy-Preserving Indexing**: Encrypted indexing without leaking keywords
 

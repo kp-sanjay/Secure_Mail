@@ -9,11 +9,15 @@ const ViewEmail = () => {
   const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64 } = useAuth();
+  const { user, privateKey, mlkemSecretKeyB64, mlkem768SecretKeyB64, unlockKeys } = useAuth();
   const [email, setEmail] = useState(null);
   const [decrypted, setDecrypted] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [unlockPassword, setUnlockPassword] = useState('');
+  const [level3Password, setLevel3Password] = useState('');
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(false);
   const preDecrypted = location.state?.decrypted;
 
   useEffect(() => {
@@ -47,15 +51,17 @@ const ViewEmail = () => {
     }
   };
 
-  const decryptEmailData = async (emailData) => {
+  const decryptEmailData = async (emailData, providedPassword = null) => {
     try {
       setError('');
+      setNeedsPassword(false);
       if (emailData.envelope) {
         const dec = await decryptEnvelope({
           envelope: emailData.envelope,
           rsaPrivateKey: privateKey,
           mlkemSecretKeyB64,
           mlkem768SecretKeyB64,
+          password: providedPassword,
         });
         setDecrypted(dec);
         return;
@@ -75,6 +81,9 @@ const ViewEmail = () => {
       setDecrypted({ subject, body });
     } catch (err) {
       console.error('Error decrypting email:', err);
+      if (err.message.includes('OTP') || err.message.includes('Password Required') || err.message.includes('Incorrect password') || err.message.includes('Invalid OTP Code')) {
+        setNeedsPassword(true);
+      }
       setError(err?.message || 'Failed to decrypt email. It may be corrupted.');
     }
   };
@@ -97,6 +106,28 @@ const ViewEmail = () => {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (!level3Password || !email) return;
+    setIsUnlocking(true);
+    await decryptEmailData(email, level3Password);
+    setIsUnlocking(false);
+  };
+
+  const handleUnlock = async (e) => {
+    e.preventDefault();
+    setIsUnlocking(true);
+    setError('');
+    try {
+      if (unlockKeys) await unlockKeys(unlockPassword);
+    } catch (err) {
+      setError(err?.message || 'Failed to unlock keys. Incorrect password?');
+    } finally {
+      setIsUnlocking(false);
+      setUnlockPassword('');
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -106,15 +137,57 @@ const ViewEmail = () => {
   }
 
   if (error) {
+    const isKeyUnlock = error.includes('secret key loaded') || error.includes('private key') || error.includes('unlock');
+
     return (
       <div className="p-6 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
+        <div className="text-center portal-card p-8 max-w-md w-full">
+          <p className="text-red-500 mb-6">{error}</p>
+
+          {needsPassword ? (
+            <form onSubmit={handlePasswordSubmit} className="mb-6">
+              <p className="text-sm text-slate-300 mb-4">This Level 3 transmission is protected by a pre-shared password.</p>
+              <input
+                type="password"
+                placeholder="Enter password"
+                value={level3Password}
+                onChange={(e) => setLevel3Password(e.target.value)}
+                className="input-glass w-full mb-3 text-center text-xl text-slate-100"
+                required
+              />
+              <button
+                type="submit"
+                disabled={isUnlocking}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded w-full transition"
+              >
+                {isUnlocking ? 'Verifying...' : 'Verify & Decrypt'}
+              </button>
+            </form>
+          ) : isKeyUnlock ? (
+            <form onSubmit={handleUnlock} className="mb-6">
+              <input
+                type="password"
+                placeholder="Enter password to unlock keys"
+                value={unlockPassword}
+                onChange={(e) => setUnlockPassword(e.target.value)}
+                className="input-glass w-full mb-3"
+                required
+              />
+              <button
+                type="submit"
+                disabled={isUnlocking}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded w-full transition"
+              >
+                {isUnlocking ? 'Unlocking...' : 'Unlock Keys'}
+              </button>
+            </form>
+          ) : null}
+
           <button
             onClick={() => navigate('/inbox')}
             className="text-isro-orange hover:text-isro-orange-light font-medium"
           >
-            Back to Inbox
+            ← Back to Inbox
           </button>
         </div>
       </div>

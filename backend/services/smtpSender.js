@@ -23,13 +23,27 @@ function envelopeToMail(envelope) {
   return { subject, text, level };
 }
 
+let etherealAccount = null;
+
 async function getTransport() {
   const host = process.env.SMTP_OUT_HOST;
   const port = Number(process.env.SMTP_OUT_PORT || 587);
   const secure = boolFromEnv(process.env.SMTP_OUT_SECURE, port === 465);
 
   if (!host) {
-    throw new Error('SMTP_OUT_HOST is not set');
+    if (!etherealAccount) {
+      console.log('⚠️ No SMTP keys configured. Generating an Ethereal test account...');
+      etherealAccount = await nodemailer.createTestAccount();
+    }
+    return nodemailer.createTransport({
+      host: etherealAccount.smtp.host,
+      port: etherealAccount.smtp.port,
+      secure: etherealAccount.smtp.secure,
+      auth: {
+        user: etherealAccount.user,
+        pass: etherealAccount.pass,
+      },
+    });
   }
 
   const user = process.env.SMTP_OUT_USER;
@@ -48,7 +62,7 @@ async function sendSmtpMail({ from, to, envelope }) {
   const { subject, text, level } = envelopeToMail(envelope);
 
   const info = await transport.sendMail({
-    from,
+    from: from || '"Test QDK Sender" <sender@test.com>',
     to,
     subject,
     text,
@@ -59,8 +73,35 @@ async function sendSmtpMail({ from, to, envelope }) {
     },
   });
 
+  if (!process.env.SMTP_OUT_HOST) {
+    console.log(`\n📧 Envelope Email sent! Preview URL: ${nodemailer.getTestMessageUrl(info)}\n`);
+  }
+
   return { messageId: info.messageId || null, response: info.response || null };
 }
 
-module.exports = { sendSmtpMail };
+async function sendOtpMail({ from, to, otp }) {
+  const transport = await getTransport();
+  const subject = "Secure Mail Unlock: Action Required";
+  const text = `You've received a Level 3 Secure Mail.\n\nYour One-Time Password (OTP) unlock code is: ${otp}\n\nPlease enter this code to decrypt and view the contents of the message.\n\n-- QDK Mail Client`;
+
+  const info = await transport.sendMail({
+    from: from || '"Test QDK Sender" <sender@test.com>',
+    to,
+    subject,
+    text,
+    headers: {
+      'X-QDK-Level': '3',
+      'X-QDK-Action': 'OTP-Unlock',
+    },
+  });
+
+  if (!process.env.SMTP_OUT_HOST) {
+    console.log(`\n📧 OTP Email sent! Preview URL: ${nodemailer.getTestMessageUrl(info)}\n`);
+  }
+
+  return { messageId: info.messageId || null, response: info.response || null };
+}
+
+module.exports = { sendSmtpMail, sendOtpMail };
 
